@@ -1,0 +1,509 @@
+/* Spin: a decision wheel. The whole wheel lives in the link. No accounts, no server. */
+(function () {
+  "use strict";
+
+  const PALETTE = ["#FF6B6B", "#FFA94D", "#FFE066", "#63E6BE", "#74C0FC", "#B197FC", "#F783AC", "#8CE99A"];
+  const PLUM = "#2A1838";
+  const TAU = Math.PI * 2;
+  const POINTER = -Math.PI / 2;          // the pointer sits at the top
+  const MAX_ITEMS = 60;
+  const HISTORY_MAX = 10;
+  const LS = { saved: "spin-saved-v1", prefs: "spin-prefs-v1", last: "spin-last-v1" };
+
+  const $ = (id) => document.getElementById(id);
+  const el = {
+    canvas: $("wheel"), wrap: $("wheelWrap"), hub: $("spinHub"), spinBtn: $("spinBtn"), shuffleBtn: $("shuffleBtn"),
+    title: $("titleInput"), items: $("items"), addBtn: $("addBtn"), clearBtn: $("clearBtn"),
+    pasteToggle: $("pasteToggle"), pasteBox: $("pasteBox"), pasteArea: $("pasteArea"), pasteApply: $("pasteApply"),
+    presets: $("presets"), shareUrl: $("shareUrl"), copyBtn: $("copyBtn"), nativeShare: $("nativeShare"), qr: $("qr"),
+    saveBtn: $("saveBtn"), savedList: $("savedList"), savedEmpty: $("savedEmpty"),
+    soundSel: $("soundSel"), removeSel: $("removeSel"), hiddenSel: $("hiddenSel"), themeSel: $("themeSel"), resetBtn: $("resetBtn"),
+    muteBtn: $("muteBtn"), themeBtn: $("themeBtn"), bigBtn: $("bigBtn"),
+    overlay: $("overlay"), confetti: $("confetti"), winnerText: $("winnerText"), winnerSub: $("winnerSub"),
+    againBtn: $("againBtn"), removeAgainBtn: $("removeAgainBtn"), closeBtn: $("closeBtn"),
+    history: $("history"), historyChips: $("historyChips"), historyClear: $("historyClear"), emptyHint: $("emptyHint"), toast: $("toast"),
+  };
+
+  // ---------- state ----------
+  const PRESETS = [
+    { name: "Yes or no", sub: "The classic", items: ["Yes", "No", "Yes", "No"] },
+    { name: "Coin", sub: "Heads or tails", items: ["Heads", "Tails"] },
+    { name: "Dice", sub: "One to six", items: ["1", "2", "3", "4", "5", "6"] },
+    { name: "Who goes first", sub: "Rename the players", items: ["Player 1", "Player 2", "Player 3", "Player 4"] },
+    { name: "What to eat", sub: "Dinner, decided", items: ["Pizza", "Pasta", "Sushi", "Burger", "Salad", "Tacos", "Curry", "Soup"] },
+    { name: "Numbers 1 to 10", sub: "Pick a number", items: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"] },
+    { name: "Chores", sub: "Nobody argues with a wheel", items: ["Dishes", "Bins", "Hoover", "Laundry", "Table", "Bathroom"] },
+    { name: "Movie night", sub: "Genre roulette", items: ["Comedy", "Adventure", "Animation", "Sci-fi", "Mystery", "Classic"] },
+  ];
+
+  let state = fresh();
+  function fresh() {
+    return { title: "", items: PRESETS[4].items.map((t, i) => ({ t, c: i % PALETTE.length, w: 1 })), hidden: false, remove: false, sound: "classic" };
+  }
+  let prefs = loadJSON(LS.prefs, { muted: false, theme: "system" });
+  let history = [];
+  let dirtyUrl = false;
+
+  // ---------- link encoding ----------
+  function encodeState(s) {
+    const compact = { t: s.title || "", i: s.items.map((it) => [it.t, it.c, it.w]), h: s.hidden ? 1 : 0, r: s.remove ? 1 : 0, s: s.sound };
+    const json = JSON.stringify(compact);
+    const bytes = new TextEncoder().encode(json);
+    let bin = ""; bytes.forEach((b) => (bin += String.fromCharCode(b)));
+    return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  function decodeState(str) {
+    try {
+      const b64 = str.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((str.length + 3) % 4);
+      const bin = atob(b64);
+      const bytes = Uint8Array.from(bin, (ch) => ch.charCodeAt(0));
+      const c = JSON.parse(new TextDecoder().decode(bytes));
+      if (!c || !Array.isArray(c.i)) return null;
+      const items = c.i.slice(0, MAX_ITEMS).map((a, i) => ({
+        t: String(a[0] ?? "").slice(0, 60),
+        c: clampInt(a[1], 0, PALETTE.length - 1, i % PALETTE.length),
+        w: clampInt(a[2], 1, 9, 1),
+      }));
+      return { title: String(c.t || "").slice(0, 48), items, hidden: !!c.h, remove: !!c.r, sound: ["classic", "drums", "chime"].includes(c.s) ? c.s : "classic" };
+    } catch (e) { return null; }
+  }
+  function clampInt(v, lo, hi, dflt) { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : dflt; }
+  function shareLink() { return location.origin + location.pathname + "#w=" + encodeState(state); }
+  function syncUrl() {
+    const link = "#w=" + encodeState(state);
+    if (location.hash !== link) history_replace(link);
+    el.shareUrl.value = shareLink();
+    dirtyUrl = true;
+    try { localStorage.setItem(LS.last, JSON.stringify(state)); } catch (e) {}
+  }
+  function history_replace(hash) { try { window.history.replaceState(null, "", hash); } catch (e) { location.hash = hash; } }
+  function loadJSON(key, dflt) { try { const v = JSON.parse(localStorage.getItem(key)); return v == null ? dflt : v; } catch (e) { return dflt; } }
+  function saveJSON(key, v) { try { localStorage.setItem(key, JSON.stringify(v)); } catch (e) {} }
+
+  // ---------- sounds ----------
+  let ac = null;
+  function audio() {
+    if (prefs.muted) return null;
+    if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } }
+    if (ac.state === "suspended") ac.resume();
+    return ac;
+  }
+  function tone(ctx, { f = 440, type = "sine", t = 0, dur = 0.2, gain = 0.2, slideTo = null }) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type; o.frequency.setValueAtTime(f, ctx.currentTime + t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, ctx.currentTime + t + dur);
+    g.gain.setValueAtTime(0.0001, ctx.currentTime + t);
+    g.gain.exponentialRampToValueAtTime(gain, ctx.currentTime + t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + t + dur);
+    o.connect(g).connect(ctx.destination); o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + dur + 0.02);
+  }
+  function noise(ctx, { t = 0, dur = 0.05, gain = 0.15, hp = 1000 }) {
+    const n = Math.floor(ctx.sampleRate * dur), buf = ctx.createBuffer(1, n, ctx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const f = ctx.createBiquadFilter(); f.type = "highpass"; f.frequency.value = hp;
+    const g = ctx.createGain(); g.gain.value = gain;
+    src.connect(f).connect(g).connect(ctx.destination); src.start(ctx.currentTime + t);
+  }
+  const SOUNDS = {
+    classic: {
+      tick(ctx, speed) { tone(ctx, { f: 1500 + Math.min(900, speed * 40), type: "square", dur: 0.025, gain: 0.05 }); },
+      win(ctx) { [523, 659, 784, 1046].forEach((f, i) => tone(ctx, { f, type: "triangle", t: i * 0.09, dur: i === 3 ? 0.6 : 0.16, gain: 0.18 })); },
+    },
+    drums: {
+      tick(ctx) { noise(ctx, { dur: 0.04, gain: 0.12, hp: 1800 }); tone(ctx, { f: 160, type: "sine", dur: 0.04, gain: 0.08, slideTo: 60 }); },
+      win(ctx) { tone(ctx, { f: 120, type: "sine", dur: 0.35, gain: 0.3, slideTo: 40 }); noise(ctx, { dur: 0.9, gain: 0.18, hp: 4000 }); noise(ctx, { t: 0.02, dur: 0.6, gain: 0.1, hp: 800 }); },
+    },
+    chime: {
+      tick(ctx) { tone(ctx, { f: 1760, type: "sine", dur: 0.06, gain: 0.04 }); },
+      win(ctx) { [784, 988, 1175, 1568].forEach((f, i) => { tone(ctx, { f, type: "sine", t: i * 0.12, dur: 1.1, gain: 0.14 }); tone(ctx, { f: f * 2.01, type: "sine", t: i * 0.12, dur: 0.5, gain: 0.04 }); }); },
+    },
+  };
+  function playTick(speed) { const ctx = audio(); if (ctx) SOUNDS[state.sound].tick(ctx, speed); }
+  function playWin() { const ctx = audio(); if (ctx) SOUNDS[state.sound].win(ctx); }
+
+  // ---------- wheel ----------
+  const ctx2d = el.canvas.getContext("2d");
+  let angle = 0, vel = 0, spinning = false, lastT = 0, lastIdx = -1, flex = 0, flexDir = 1, size = 0, dpr = 1;
+  let drag = null;   // {a0, angle0, samples:[{t,a}]}
+  let raf = 0;
+
+  function slices() {
+    const items = state.items.filter((it) => it.t.trim() !== "" || state.items.length <= 1);
+    const total = items.reduce((s, it) => s + it.w, 0) || 1;
+    let a = 0;
+    return items.map((it) => { const span = TAU * it.w / total; const s = { it, start: a, end: a + span, mid: a + span / 2 }; a += span; return s; });
+  }
+  function indexAt(theta, sl) {
+    // which slice is under the pointer, given the wheel rotation theta
+    let a = ((POINTER - theta) % TAU + TAU) % TAU;
+    for (let i = 0; i < sl.length; i++) if (a >= sl[i].start && a < sl[i].end) return i;
+    return sl.length - 1;
+  }
+  function resize() {
+    const r = el.wrap.getBoundingClientRect();
+    dpr = Math.min(2.5, window.devicePixelRatio || 1);
+    size = Math.max(200, Math.floor(r.width));
+    el.canvas.width = Math.floor(size * dpr); el.canvas.height = Math.floor(size * dpr);
+    draw();
+  }
+  function draw() {
+    const sl = slices(); const n = sl.length;
+    const c = size / 2, R = c - c * 0.06;
+    const x = ctx2d; x.setTransform(dpr, 0, 0, dpr, 0, 0); x.clearRect(0, 0, size, size);
+    // outer glass ring
+    x.save(); x.translate(c, c);
+    x.beginPath(); x.arc(0, 0, R + c * 0.045, 0, TAU); x.fillStyle = "rgba(42,24,56,.9)"; x.fill();
+    x.beginPath(); x.arc(0, 0, R + c * 0.045, 0, TAU); x.lineWidth = 2; x.strokeStyle = "rgba(255,255,255,.35)"; x.stroke();
+    x.rotate(angle);
+    if (n === 0) {
+      x.beginPath(); x.arc(0, 0, R, 0, TAU); x.fillStyle = "rgba(255,255,255,.15)"; x.fill();
+    }
+    const showLabels = !(state.hidden && (spinning || lastIdx === -1 || hideUntilStop));
+    for (let i = 0; i < n; i++) {
+      const s = sl[i];
+      x.beginPath(); x.moveTo(0, 0); x.arc(0, 0, R, s.start, s.end); x.closePath();
+      x.fillStyle = PALETTE[s.it.c % PALETTE.length]; x.fill();
+      x.lineWidth = n > 1 ? Math.max(1.5, c * 0.006) : 0; x.strokeStyle = "rgba(42,24,56,.85)"; if (n > 1) x.stroke();
+      // label
+      const span = s.end - s.start;
+      const label = showLabels ? s.it.t.trim() : "?";
+      // labels always read left to right on screen: slices on the left half are drawn flipped
+      const flip = Math.cos(s.mid + angle) < 0;
+      x.save(); x.rotate(s.mid + (flip ? Math.PI : 0));
+      const maxW = R * 0.62;
+      const fs = label === "?" ? c * 0.16 : Math.max(10, Math.min(c * 0.11, span * R * 0.42, (maxW * 1.9) / Math.max(3, label.length)));
+      x.font = `800 ${fs}px Manrope, system-ui, sans-serif`; x.textBaseline = "middle"; x.fillStyle = PLUM;
+      const txt = fit(x, label, maxW);
+      if (flip) { x.textAlign = "left"; x.fillText(txt, -R * 0.9, 0); } else { x.textAlign = "right"; x.fillText(txt, R * 0.9, 0); }
+      x.restore();
+    }
+    // pegs at the boundaries
+    if (n > 1) for (const s of sl) { x.beginPath(); x.arc(Math.cos(s.start) * (R + c * 0.02), Math.sin(s.start) * (R + c * 0.02), c * 0.012, 0, TAU); x.fillStyle = "rgba(255,255,255,.75)"; x.fill(); }
+    // glass highlight (frost)
+    x.rotate(-angle);
+    const g = x.createRadialGradient(-R * 0.4, -R * 0.5, 0, 0, 0, R * 1.1);
+    g.addColorStop(0, "rgba(255,255,255,.28)"); g.addColorStop(0.5, "rgba(255,255,255,.05)"); g.addColorStop(1, "rgba(255,255,255,0)");
+    x.beginPath(); x.arc(0, 0, R, 0, TAU); x.fillStyle = g; x.fill();
+    x.restore();
+    // pointer with flex
+    x.save(); x.translate(c, c * 0.045);
+    x.rotate(flex * 0.35 * flexDir);
+    x.beginPath(); x.moveTo(-c * 0.07, -c * 0.02); x.lineTo(c * 0.07, -c * 0.02); x.lineTo(0, c * 0.11); x.closePath();
+    x.fillStyle = "#FFF4E6"; x.shadowColor = "rgba(42,24,56,.4)"; x.shadowBlur = 8; x.shadowOffsetY = 3; x.fill();
+    x.shadowColor = "transparent"; x.lineWidth = 2; x.strokeStyle = PLUM; x.stroke();
+    x.restore();
+  }
+  function fit(x, text, maxW) {
+    if (x.measureText(text).width <= maxW) return text;
+    let lo = 0, hi = text.length;
+    while (lo < hi) { const m = (lo + hi + 1) >> 1; if (x.measureText(text.slice(0, m) + "…").width <= maxW) lo = m; else hi = m - 1; }
+    return text.slice(0, Math.max(1, lo)) + "…";
+  }
+  let hideUntilStop = false;
+
+  function frame(t) {
+    const dt = Math.min(0.05, (t - lastT) / 1000 || 0.016); lastT = t;
+    if (spinning) {
+      angle += vel * dt;
+      // friction: stronger when slow so it settles cleanly
+      const decel = 0.55 + 1.2 / (1 + Math.abs(vel));
+      vel -= vel * decel * dt;
+      if (Math.abs(vel) < 0.08) { vel = 0; spinning = false; onStop(); }
+    }
+    const sl = slices();
+    if (sl.length > 1) {
+      const idx = indexAt(angle, sl);
+      if (idx !== lastIdx) {
+        if (lastIdx !== -1 && (spinning || drag)) { playTick(Math.abs(vel)); flex = 1; flexDir = vel >= 0 ? 1 : -1; }
+        lastIdx = idx;
+      }
+    }
+    if (flex > 0) flex = Math.max(0, flex - dt * 7);
+    draw();
+    if (spinning || drag || flex > 0) raf = requestAnimationFrame(frame); else raf = 0;
+  }
+  function tick() { if (!raf) { lastT = performance.now(); raf = requestAnimationFrame(frame); } }
+
+  function canSpin() { return slices().length >= 2; }
+  function spin(power) {
+    if (!canSpin() || spinning) return;
+    audio();
+    hideUntilStop = state.hidden;
+    const p = power || 20 + Math.random() * 12;      // rad/s
+    vel = p * (Math.random() < 0.5 && power == null ? 1 : 1);
+    spinning = true; el.hub.disabled = true; el.spinBtn.disabled = true;
+    tick();
+  }
+  function onStop() {
+    hideUntilStop = false;
+    const sl = slices(); if (sl.length < 2) return;
+    const idx = indexAt(angle, sl); const win = sl[idx].it;
+    el.hub.disabled = false; el.spinBtn.disabled = false;
+    // nudge the wheel so the pointer sits clearly inside the slice (never on the line)
+    const a = ((POINTER - angle) % TAU + TAU) % TAU; const edge = Math.min(a - sl[idx].start, sl[idx].end - a);
+    if (edge < 0.02) angle += (a - sl[idx].start < sl[idx].end - a ? -0.03 : 0.03);
+    draw();
+    showWinner(win);
+  }
+
+  // drag to fling
+  function pointerAngle(e) { const r = el.canvas.getBoundingClientRect(); return Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2)); }
+  el.canvas.addEventListener("pointerdown", (e) => {
+    if (spinning || !canSpin()) return;
+    el.canvas.setPointerCapture(e.pointerId); el.canvas.classList.add("is-dragging");
+    drag = { a0: pointerAngle(e), angle0: angle, samples: [{ t: performance.now(), a: angle }] };
+    audio(); tick();
+  });
+  el.canvas.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    let d = pointerAngle(e) - drag.a0; if (d > Math.PI) d -= TAU; if (d < -Math.PI) d += TAU;
+    angle = drag.angle0 + d;
+    drag.samples.push({ t: performance.now(), a: angle }); if (drag.samples.length > 6) drag.samples.shift();
+  });
+  function endDrag() {
+    if (!drag) return;
+    el.canvas.classList.remove("is-dragging");
+    const s = drag.samples; drag = null;
+    if (s.length >= 2) {
+      const a = s[0], b = s[s.length - 1]; const dt = (b.t - a.t) / 1000;
+      let da = b.a - a.a;
+      const v = dt > 0 ? da / dt : 0;
+      if (Math.abs(v) > 2.5) { vel = Math.max(-40, Math.min(40, v)); hideUntilStop = state.hidden; spinning = true; el.hub.disabled = true; el.spinBtn.disabled = true; }
+    }
+    tick();
+  }
+  el.canvas.addEventListener("pointerup", endDrag);
+  el.canvas.addEventListener("pointercancel", endDrag);
+  el.canvas.addEventListener("lostpointercapture", endDrag);
+  el.hub.addEventListener("click", () => spin());
+  el.spinBtn.addEventListener("click", () => spin());
+  window.addEventListener("keydown", (e) => {
+    if (e.key === " " && !["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(document.activeElement.tagName)) { e.preventDefault(); if (el.overlay.hidden) spin(); }
+    if (e.key === "Escape") { if (!el.overlay.hidden) closeWinner(); else if (document.body.classList.contains("big")) setBig(false); }
+  });
+
+  // ---------- winner ----------
+  let lastWinner = null;
+  function showWinner(win) {
+    lastWinner = win;
+    const col = PALETTE[win.c % PALETTE.length];
+    el.winnerText.textContent = win.t.trim() || "(blank)";
+    el.winnerText.style.setProperty("--w1", col); el.winnerText.style.setProperty("--w2", PALETTE[(win.c + 1) % PALETTE.length]);
+    el.winnerSub.textContent = state.remove ? "This one leaves the wheel now." : "";
+    el.overlay.hidden = false; el.againBtn.focus();
+    pushHistory(win); playWin(); confetti(col);
+    if (state.remove) { removeItem(win); }
+  }
+  function closeWinner() { el.overlay.hidden = true; stopConfetti(); }
+  el.closeBtn.addEventListener("click", closeWinner);
+  el.overlay.addEventListener("click", (e) => { if (e.target === el.overlay) closeWinner(); });
+  el.againBtn.addEventListener("click", () => { closeWinner(); spin(); });
+  el.removeAgainBtn.addEventListener("click", () => { if (lastWinner && !state.remove) removeItem(lastWinner); closeWinner(); spin(); });
+  function removeItem(it) {
+    const i = state.items.indexOf(it); if (i >= 0) state.items.splice(i, 1);
+    lastIdx = -1; renderItems(); changed();
+    if (state.items.length < 2) toast("Only one left. Add more options to spin again.");
+  }
+
+  // history strip
+  function pushHistory(win) {
+    history.unshift({ t: win.t.trim() || "(blank)", c: win.c }); if (history.length > HISTORY_MAX) history.pop();
+    renderHistory();
+  }
+  function renderHistory() {
+    el.history.hidden = history.length === 0;
+    el.historyChips.innerHTML = "";
+    for (const h of history) { const s = document.createElement("span"); s.className = "chip"; s.style.setProperty("--chip-color", PALETTE[h.c % PALETTE.length]); s.textContent = h.t; s.title = h.t; el.historyChips.appendChild(s); }
+  }
+  el.historyClear.addEventListener("click", () => { history = []; renderHistory(); });
+
+  // ---------- confetti ----------
+  let confRaf = 0, parts = [];
+  function confetti(mainColor) {
+    const cv = el.confetti, x = cv.getContext("2d");
+    cv.width = innerWidth * dpr; cv.height = innerHeight * dpr; x.setTransform(dpr, 0, 0, dpr, 0, 0);
+    parts = [];
+    const colors = [mainColor, ...PALETTE];
+    for (let i = 0; i < 160; i++) parts.push({
+      x: innerWidth / 2 + (Math.random() - 0.5) * 80, y: innerHeight / 2, vx: (Math.random() - 0.5) * 16, vy: -6 - Math.random() * 12,
+      w: 6 + Math.random() * 8, h: 4 + Math.random() * 6, r: Math.random() * TAU, vr: (Math.random() - 0.5) * 0.3, c: colors[i % colors.length], life: 1,
+    });
+    let last = performance.now();
+    cancelAnimationFrame(confRaf);
+    const step = (t) => {
+      const dt = Math.min(0.05, (t - last) / 1000); last = t;
+      x.clearRect(0, 0, innerWidth, innerHeight);
+      let alive = 0;
+      for (const p of parts) {
+        p.vy += 22 * dt; p.x += p.vx * 60 * dt * 0.5; p.y += p.vy * 60 * dt * 0.5; p.r += p.vr; p.vx *= 0.995; p.life -= dt * 0.35;
+        if (p.life <= 0 || p.y > innerHeight + 20) continue; alive++;
+        x.save(); x.translate(p.x, p.y); x.rotate(p.r); x.globalAlpha = Math.min(1, p.life * 2); x.fillStyle = p.c; x.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); x.restore();
+      }
+      if (alive > 0 && !el.overlay.hidden) confRaf = requestAnimationFrame(step); else x.clearRect(0, 0, innerWidth, innerHeight);
+    };
+    confRaf = requestAnimationFrame(step);
+  }
+  function stopConfetti() { cancelAnimationFrame(confRaf); const x = el.confetti.getContext("2d"); x.clearRect(0, 0, el.confetti.width, el.confetti.height); }
+
+  // ---------- options editor ----------
+  function renderItems() {
+    el.items.innerHTML = "";
+    state.items.forEach((it, i) => {
+      const li = document.createElement("li"); li.className = "item";
+      const sw = document.createElement("button"); sw.className = "swatch"; sw.type = "button"; sw.style.setProperty("--sw", PALETTE[it.c % PALETTE.length]);
+      sw.setAttribute("aria-label", "Change colour"); sw.title = "Change colour";
+      sw.addEventListener("click", () => { it.c = (it.c + 1) % PALETTE.length; sw.style.setProperty("--sw", PALETTE[it.c]); changed(); });
+      const inp = document.createElement("input"); inp.type = "text"; inp.value = it.t; inp.maxLength = 60; inp.placeholder = "Option " + (i + 1); inp.setAttribute("aria-label", "Option " + (i + 1));
+      inp.addEventListener("input", () => { it.t = inp.value; changed(); });
+      inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addItem(i + 1); } if (e.key === "Backspace" && inp.value === "" && state.items.length > 1) { e.preventDefault(); state.items.splice(i, 1); renderItems(); changed(); focusItem(Math.max(0, i - 1)); } });
+      const wt = document.createElement("div"); wt.className = "weight";
+      const minus = document.createElement("button"); minus.type = "button"; minus.textContent = "−"; minus.setAttribute("aria-label", "Less weight");
+      const num = document.createElement("span"); num.textContent = it.w;
+      const plus = document.createElement("button"); plus.type = "button"; plus.textContent = "+"; plus.setAttribute("aria-label", "More weight");
+      minus.addEventListener("click", () => { it.w = Math.max(1, it.w - 1); num.textContent = it.w; changed(); });
+      plus.addEventListener("click", () => { it.w = Math.min(9, it.w + 1); num.textContent = it.w; changed(); });
+      wt.append(minus, num, plus); wt.title = "Weight: how many slices this option gets";
+      const del = document.createElement("button"); del.className = "del"; del.type = "button"; del.textContent = "×"; del.setAttribute("aria-label", "Remove option");
+      del.addEventListener("click", () => { state.items.splice(i, 1); renderItems(); changed(); });
+      li.append(sw, inp, wt, del); el.items.appendChild(li);
+    });
+  }
+  function focusItem(i) { const inp = el.items.querySelectorAll('input[type="text"]')[i]; if (inp) { inp.focus(); inp.select(); } }
+  function addItem(at) {
+    if (state.items.length >= MAX_ITEMS) { toast("That's the limit, " + MAX_ITEMS + " options."); return; }
+    const used = state.items.map((x) => x.c); let c = 0; for (let k = 0; k < PALETTE.length; k++) if (!used.includes(k)) { c = k; break; } if (used.length >= PALETTE.length) c = state.items.length % PALETTE.length;
+    const idx = at == null ? state.items.length : at;
+    // avoid two neighbours sharing a colour
+    const prev = state.items[idx - 1]; if (prev && prev.c === c) c = (c + 1) % PALETTE.length;
+    state.items.splice(idx, 0, { t: "", c, w: 1 }); renderItems(); changed(); focusItem(idx);
+  }
+  el.addBtn.addEventListener("click", () => addItem());
+  el.clearBtn.addEventListener("click", () => { state.items = [{ t: "", c: 0, w: 1 }, { t: "", c: 1, w: 1 }]; renderItems(); changed(); focusItem(0); });
+  el.pasteToggle.addEventListener("click", () => { const open = el.pasteBox.hidden; el.pasteBox.hidden = !open; el.pasteToggle.setAttribute("aria-expanded", String(open)); if (open) { el.pasteArea.value = state.items.map((x) => x.t + (x.w > 1 ? " ×" + x.w : "")).join("\n"); el.pasteArea.focus(); } });
+  el.pasteApply.addEventListener("click", () => {
+    const lines = el.pasteArea.value.split(/\r?\n|,|;/).map((s) => s.trim()).filter(Boolean).slice(0, MAX_ITEMS);
+    if (lines.length === 0) { toast("Nothing to use yet."); return; }
+    state.items = lines.map((line, i) => { const m = line.match(/^(.*?)\s*[×x\*]\s*(\d)$/i); return { t: (m ? m[1] : line).slice(0, 60), c: i % PALETTE.length, w: m ? clampInt(m[2], 1, 9, 1) : 1 }; });
+    el.pasteBox.hidden = true; el.pasteToggle.setAttribute("aria-expanded", "false"); renderItems(); changed();
+  });
+  el.shuffleBtn.addEventListener("click", () => { for (let i = state.items.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [state.items[i], state.items[j]] = [state.items[j], state.items[i]]; } renderItems(); changed(); });
+  el.title.addEventListener("input", () => { state.title = el.title.value; changed(); });
+
+  function changed() {
+    lastIdx = -1; draw(); syncUrl();
+    const ok = canSpin(); el.spinBtn.disabled = !ok || spinning; el.hub.disabled = !ok || spinning; el.emptyHint.hidden = ok;
+    document.title = (state.title ? state.title + " · " : "") + "Spin";
+    if (activeTab === "share") renderShare();
+  }
+
+  // ---------- presets ----------
+  PRESETS.forEach((p) => {
+    const b = document.createElement("button"); b.className = "preset"; b.type = "button";
+    const dots = document.createElement("span"); dots.className = "dots"; p.items.slice(0, 6).forEach((_, i) => { const d = document.createElement("i"); d.style.background = PALETTE[i % PALETTE.length]; dots.appendChild(d); });
+    const strong = document.createElement("strong"); strong.textContent = p.name; const small = document.createElement("small"); small.textContent = p.sub;
+    b.append(dots, strong, small);
+    b.addEventListener("click", () => { state.title = p.name; el.title.value = p.name; state.items = p.items.map((t, i) => ({ t, c: i % PALETTE.length, w: 1 })); history = []; renderHistory(); renderItems(); changed(); setTab("options"); toast(p.name + " loaded"); });
+    el.presets.appendChild(b);
+  });
+
+  // ---------- share ----------
+  function renderShare() {
+    const url = shareLink(); el.shareUrl.value = url;
+    try {
+      const q = qrcode(0, "M"); q.addData(url); q.make();
+      const n = q.getModuleCount(), cv = el.qr, x = cv.getContext("2d"); const px = 212, s = px / n, pad = 10;
+      cv.width = (px + pad * 2) * 2; cv.height = cv.width; x.setTransform(2, 0, 0, 2, 0, 0);
+      x.fillStyle = "#fff"; x.fillRect(0, 0, px + pad * 2, px + pad * 2); x.fillStyle = PLUM;
+      for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) x.fillRect(pad + c * s, pad + r * s, s + 0.2, s + 0.2);
+      cv.hidden = false;
+    } catch (e) { el.qr.hidden = true; }
+    dirtyUrl = false;
+  }
+  el.copyBtn.addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(shareLink()); toast("Link copied"); }
+    catch (e) { el.shareUrl.select(); document.execCommand && document.execCommand("copy"); toast("Link selected, press copy"); }
+  });
+  if (navigator.share) { el.nativeShare.hidden = false; el.nativeShare.addEventListener("click", () => navigator.share({ title: state.title || "Spin", url: shareLink() }).catch(() => {})); }
+
+  // ---------- saved wheels ----------
+  function renderSaved() {
+    const list = loadJSON(LS.saved, []);
+    el.savedList.innerHTML = ""; el.savedEmpty.hidden = list.length > 0;
+    list.forEach((s) => {
+      const li = document.createElement("li");
+      const name = document.createElement("div"); name.className = "name"; name.textContent = s.name;
+      const meta = document.createElement("span"); meta.className = "meta"; meta.textContent = (s.data.items || []).length + " options · " + new Date(s.at).toLocaleDateString(); name.appendChild(meta);
+      const load = document.createElement("button"); load.className = "btn btn-small"; load.textContent = "Load"; load.type = "button";
+      load.addEventListener("click", () => { applyState(s.data); history = []; renderHistory(); setTab("options"); toast(s.name + " loaded"); });
+      const del = document.createElement("button"); del.className = "del"; del.textContent = "×"; del.type = "button"; del.setAttribute("aria-label", "Delete " + s.name);
+      del.addEventListener("click", () => { saveJSON(LS.saved, loadJSON(LS.saved, []).filter((x) => x.id !== s.id)); renderSaved(); });
+      li.append(name, load, del); el.savedList.appendChild(li);
+    });
+  }
+  el.saveBtn.addEventListener("click", () => {
+    const dflt = state.title || state.items.filter((x) => x.t.trim()).slice(0, 3).map((x) => x.t.trim()).join(", ") || "My wheel";
+    const name = prompt("Name for this wheel", dflt); if (name == null) return;
+    const list = loadJSON(LS.saved, []); list.unshift({ id: Date.now().toString(36), name: name.trim().slice(0, 48) || dflt, at: Date.now(), data: JSON.parse(JSON.stringify(state)) });
+    saveJSON(LS.saved, list.slice(0, 50)); renderSaved(); toast("Saved on this device");
+  });
+
+  // ---------- settings ----------
+  el.soundSel.addEventListener("change", () => { state.sound = el.soundSel.value; changed(); playWin(); });
+  el.removeSel.addEventListener("change", () => { state.remove = el.removeSel.checked; changed(); });
+  el.hiddenSel.addEventListener("change", () => { state.hidden = el.hiddenSel.checked; changed(); });
+  el.themeSel.addEventListener("change", () => { prefs.theme = el.themeSel.value; applyTheme(); saveJSON(LS.prefs, prefs); });
+  el.resetBtn.addEventListener("click", () => { if (!confirm("Start a fresh wheel? The current one stays reachable through its link.")) return; applyState(fresh()); history = []; renderHistory(); setTab("options"); });
+  el.muteBtn.addEventListener("click", () => { prefs.muted = !prefs.muted; el.muteBtn.setAttribute("aria-pressed", String(prefs.muted)); el.muteBtn.setAttribute("aria-label", prefs.muted ? "Unmute sounds" : "Mute sounds"); saveJSON(LS.prefs, prefs); if (!prefs.muted) playTick(10); });
+  el.themeBtn.addEventListener("click", () => { const dark = isDark(); prefs.theme = dark ? "light" : "dark"; el.themeSel.value = prefs.theme; applyTheme(); saveJSON(LS.prefs, prefs); });
+  function isDark() { const t = document.documentElement.getAttribute("data-theme"); return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; }
+  function applyTheme() { if (prefs.theme === "system") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", prefs.theme); }
+
+  // big mode
+  function setBig(on) {
+    document.body.classList.toggle("big", on); el.bigBtn.setAttribute("aria-pressed", String(on));
+    if (on && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+    if (!on && document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+    setTimeout(resize, 50); setTimeout(resize, 400);
+  }
+  el.bigBtn.addEventListener("click", () => setBig(!document.body.classList.contains("big")));
+  document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement && document.body.classList.contains("big")) setBig(false); });
+
+  // tabs
+  let activeTab = "options";
+  function setTab(name) {
+    activeTab = name;
+    document.querySelectorAll(".tab").forEach((t) => { const on = t.dataset.tab === name; t.classList.toggle("is-active", on); t.setAttribute("aria-selected", String(on)); });
+    document.querySelectorAll(".pane").forEach((p) => { p.hidden = p.id !== "pane-" + name; p.classList.toggle("is-active", !p.hidden); });
+    if (name === "share") renderShare(); if (name === "saved") renderSaved();
+  }
+  document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => setTab(t.dataset.tab)));
+
+  // toast
+  let toastT = 0;
+  function toast(msg) { el.toast.textContent = msg; el.toast.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (el.toast.hidden = true), 2200); }
+
+  // ---------- apply + boot ----------
+  function applyState(s) {
+    state = { title: s.title || "", items: (s.items || []).map((it) => ({ t: String(it.t || ""), c: clampInt(it.c, 0, PALETTE.length - 1, 0), w: clampInt(it.w, 1, 9, 1) })), hidden: !!s.hidden, remove: !!s.remove, sound: SOUNDS[s.sound] ? s.sound : "classic" };
+    if (state.items.length === 0) state.items = [{ t: "", c: 0, w: 1 }, { t: "", c: 1, w: 1 }];
+    el.title.value = state.title; el.soundSel.value = state.sound; el.removeSel.checked = state.remove; el.hiddenSel.checked = state.hidden;
+    lastIdx = -1; renderItems(); changed();
+  }
+  function boot() {
+    applyTheme(); el.themeSel.value = prefs.theme; el.muteBtn.setAttribute("aria-pressed", String(!!prefs.muted));
+    const m = location.hash.match(/#w=([A-Za-z0-9\-_]+)/);
+    const fromLink = m && decodeState(m[1]);
+    const last = loadJSON(LS.last, null);
+    applyState(fromLink || last || fresh());
+    if (fromLink && fromLink.title) toast("Opened: " + fromLink.title);
+    resize(); renderHistory();
+    new ResizeObserver(resize).observe(el.wrap);
+    window.addEventListener("hashchange", () => { const mm = location.hash.match(/#w=([A-Za-z0-9\-_]+)/); const s = mm && decodeState(mm[1]); if (s) applyState(s); });
+    if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
+  }
+  boot();
+
+  // a tiny hook for tests
+  window.__spin = { get state() { return state; }, spin, encodeState, decodeState, get angle() { return angle; }, slices, indexAt, get spinning() { return spinning; } };
+})();
