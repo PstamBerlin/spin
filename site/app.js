@@ -200,7 +200,7 @@
     if (n === 0) {
       x.beginPath(); x.arc(0, 0, R, 0, TAU); x.fillStyle = "rgba(255,255,255,.15)"; x.fill();
     }
-    const showLabels = !(state.hidden && !revealed);
+    const showLabels = state.mode === "teams" || !(state.hidden && !revealed);
     const glowing = glow && glow.until > performance.now() ? glow : null;
     for (let i = 0; i < n; i++) {
       const s = sl[i];
