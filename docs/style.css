@@ -16,10 +16,19 @@
   --mesh-opacity:.62;
   --radius:22px; --radius-s:14px;
   --grain:.07;
-  /* Motion, the Chalkboard way: one set of timings, springy only for small pops,
-     --moving is 1 while things may travel or scale and 0 when only fades are left */
+  /* Motion: liquid. Things stretch on the way, overshoot a little and settle (real spring curves),
+     lines grow and shrink, and what you press squashes like jelly.
+     --moving is 1 while things may travel or scale and 0 when only fades are left. */
   --ease:cubic-bezier(.22,.61,.36,1); --ease-out:cubic-bezier(.22,1,.36,1); --ease-spring:cubic-bezier(.34,1.56,.64,1);
+  --spring:var(--ease-spring); --spring-soft:var(--ease-out); --t-spring:420ms;
   --dur-1:120ms; --dur-2:200ms; --dur-3:320ms; --dur-4:460ms; --moving:1;
+}
+@supports (transition-timing-function: linear(0, 1)){
+  :root{
+    --spring:linear(0,0.143,0.457,0.793,1.052,1.197,1.233,1.194,1.118,1.041,0.983,0.952,0.946,0.956,0.974,0.992,1.005,1.012,1.013,1.01,1.006,1.001,0.999,0.997,0.997,0.998,0.999,1,1);
+    --spring-soft:linear(0,0.067,0.223,0.414,0.603,0.767,0.896,0.988,1.045,1.075,1.084,1.079,1.066,1.05,1.034,1.02,1.009,1.001,0.996,0.994,0.993,0.993,0.994,0.996,0.997,0.998,0.999,1,1);
+    --t-spring:640ms;
+  }
 }
 @media (prefers-reduced-motion: reduce){:root{--moving:0}}
 :root[data-theme="dark"]{
@@ -97,12 +106,12 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;back
 .icon-btn{
   width:40px;height:40px;border-radius:12px;border:1px solid transparent;background:transparent;display:grid;place-items:center;color:var(--ink);
 }
-.icon-btn{transition:background var(--dur-1) var(--ease),transform var(--dur-1) var(--ease)}
-.icon-btn:hover{background:var(--chip);transform:translateY(calc(-1px * var(--moving)))}
-.icon-btn:active{transform:scale(calc(1 - .06 * var(--moving)));transition-duration:60ms}
-.icon-btn .ico{transition:transform var(--dur-2) var(--ease-spring)}
-.icon-btn.popped .ico{animation:ico-pop var(--dur-2) var(--ease-spring)}
-@keyframes ico-pop{from{transform:scale(calc(1 - .35 * var(--moving))) rotate(calc(-12deg * var(--moving)))}}
+.icon-btn{transform:translate(var(--mx,0px),var(--my,0px));transition:background var(--dur-1) var(--ease),transform var(--t-spring) var(--spring)}
+.icon-btn.pulling{transition:background var(--dur-1) var(--ease),transform 90ms var(--ease-out)}
+.icon-btn:hover{background:var(--chip)}
+.icon-btn:active{transform:translate(var(--mx,0px),var(--my,0px)) scale(calc(1 + .1 * var(--moving)),calc(1 - .14 * var(--moving)));transition-duration:70ms}
+.icon-btn.popped .ico{animation:ico-pop var(--t-spring) var(--spring)}
+@keyframes ico-pop{from{transform:scale(calc(1 - .5 * var(--moving)),calc(1 - .2 * var(--moving))) rotate(calc(-20deg * var(--moving)))}}
 .icon-btn[aria-pressed="true"]{background:var(--chip);border-color:var(--frost-line)}
 .ico{width:22px;height:22px;fill:currentColor}
 .ico .stroke{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
@@ -129,11 +138,15 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;back
 /* ---- stage ---- */
 .stage{display:flex;flex-direction:column;align-items:center;gap:14px;min-width:0}
 .title{
-  width:min(100%,420px); text-align:center; background:transparent; border:0; border-bottom:2px dashed var(--field-line);
+  width:min(100%,420px); text-align:center; border:0;
+  background:linear-gradient(90deg,var(--coral),var(--mango)) center bottom/0% 3px no-repeat, linear-gradient(var(--field-line),var(--field-line)) center bottom/34% 3px no-repeat;
+  transition:background-size var(--t-spring) var(--spring); animation:line-grow var(--dur-4) var(--ease-out) 200ms backwards;
   font-family:"Unbounded",sans-serif; font-weight:500; font-size:clamp(18px,3vw,24px); padding:6px 10px; color:var(--ink); border-radius:0;
 }
 .title::placeholder{color:var(--ink-faint)}
-.title:focus{border-bottom-style:solid;outline:none}
+.title:hover{background-size:0% 3px, 60% 3px}
+.title:focus{background-size:100% 3px, 100% 3px;outline:none}
+@keyframes line-grow{from{background-size:0% 3px, 0% 3px}}
 .wheel-wrap{position:relative; width:min(100%, 560px, calc(100dvh - 300px)); min-width:240px; aspect-ratio:1; touch-action:none; user-select:none}
 #wheel{width:100%;height:100%;display:block;cursor:grab;border-radius:50%}
 #wheel.is-dragging{cursor:grabbing}
@@ -142,10 +155,12 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;back
   width:19%; aspect-ratio:1; border-radius:50%; border:3px solid rgba(255,255,255,.6);
   background:rgba(42,24,56,.92); color:#FFF4E6; font-family:"Unbounded",sans-serif; font-weight:800; font-size:clamp(12px,2.6vw,17px);
   box-shadow:0 10px 30px rgba(42,24,56,.35), inset 0 1px 0 rgba(255,255,255,.25); letter-spacing:.02em; text-transform:uppercase;
-  transition:transform var(--dur-1) var(--ease);
+  transform:translate(calc(-50% + var(--mx,0px)),calc(-50% + var(--my,0px)));
+  transition:transform var(--t-spring) var(--spring);
 }
-.hub:hover{transform:translate(-50%,-50%) scale(calc(1 + .05 * var(--moving)))}
-.hub:active{transform:translate(-50%,-50%) scale(calc(1 - .04 * var(--moving)));transition-duration:60ms}
+.hub.pulling{transition:transform 90ms var(--ease-out)}
+.hub:hover{transform:translate(calc(-50% + var(--mx,0px)),calc(-50% + var(--my,0px))) scale(calc(1 + .06 * var(--moving)))}
+.hub:active{transform:translate(calc(-50% + var(--mx,0px)),calc(-50% + var(--my,0px))) scale(calc(1 + .08 * var(--moving)),calc(1 - .1 * var(--moving)));transition-duration:70ms}
 .hub:disabled{opacity:.75;cursor:not-allowed}
 .hub[aria-busy="true"]{animation:hubspin 1.2s linear infinite}
 @keyframes hubspin{from{box-shadow:0 10px 30px rgba(42,24,56,.35), inset 0 1px 0 rgba(255,255,255,.25)}50%{box-shadow:0 10px 40px rgba(255,107,107,.55), inset 0 1px 0 rgba(255,255,255,.25)}to{box-shadow:0 10px 30px rgba(42,24,56,.35), inset 0 1px 0 rgba(255,255,255,.25)}}
@@ -165,15 +180,18 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;back
   background:var(--chip-color,var(--lemon)); max-width:160px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
 .chip:first-child{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--chip-color,var(--lemon))}
-.chip.fresh{animation:chip-in var(--dur-2) var(--ease-spring)}
+.chip.fresh{animation:blob-in var(--t-spring) var(--spring)}
 
 /* ---- buttons ---- */
 .btn{
   border:1px solid transparent; border-radius:999px; padding:12px 22px; font-weight:800; font-size:16px; line-height:1;
-  background:var(--chip); color:var(--ink); transition:transform var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease), background var(--dur-1) var(--ease);
+  background:var(--chip); color:var(--ink); transform:translate(var(--mx,0px),var(--my,0px));
+  transition:transform var(--t-spring) var(--spring), box-shadow var(--dur-2) var(--ease), background var(--dur-1) var(--ease);
 }
-.btn:hover{transform:translateY(calc(-2px * var(--moving))) scale(calc(1 + .02 * var(--moving)))}
-.btn:active{transform:scale(calc(1 - .05 * var(--moving)));transition-duration:60ms}
+.btn.pulling{transition:transform 90ms var(--ease-out), box-shadow var(--dur-2) var(--ease), background var(--dur-1) var(--ease)}
+.btn:hover{transform:translate(var(--mx,0px),calc(var(--my,0px) - 2px * var(--moving)))}
+/* jelly: wider and flatter while pressed, springs back on release */
+.btn:active{transform:translate(var(--mx,0px),var(--my,0px)) scale(calc(1 + .06 * var(--moving)),calc(1 - .1 * var(--moving)));transition-duration:70ms}
 .btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
 .btn-primary{
   background:linear-gradient(135deg,var(--coral),var(--mango)); color:var(--plum); padding:14px 34px; font-size:18px;
@@ -197,12 +215,19 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;back
 .tab:hover{color:var(--ink)}
 .tab.is-active{color:var(--ink)}
 .tabs:not(.has-glider) .tab.is-active{border-bottom-color:var(--coral)}
-/* the glider: a pill that slides under the active tab, like Chalkboard's tab pill */
-.tab-glider{position:absolute;left:0;bottom:0;height:3px;width:0;border-radius:999px;background:linear-gradient(90deg,var(--coral),var(--mango));
-  transition:left calc(var(--dur-3) * var(--moving)) var(--ease-out),width calc(var(--dur-3) * var(--moving)) var(--ease-out);pointer-events:none}
+/* the tab line is liquid: it stretches thin across both tabs, then shrinks back, thicker, onto the new one */
+.tab-glider{position:absolute;left:0;bottom:0;height:4px;width:0;border-radius:999px;background:linear-gradient(90deg,var(--coral),var(--mango));pointer-events:none}
+.tab-glider.stretch{height:2px;transition:left 170ms var(--ease-out),width 170ms var(--ease-out),height 170ms var(--ease-out)}
+.tab-glider.settle{transition:left var(--t-spring) var(--spring),width var(--t-spring) var(--spring),height var(--dur-3) var(--ease-out)}
 .pane[hidden]{display:none}
-@keyframes tray-in{from{opacity:0;transform:translateY(calc(-8px * var(--moving)))}}
-.pane.is-active{animation:tray-in var(--dur-3) var(--ease-out) backwards}
+/* a pane's rows drip in one after the other, a little stretched, and settle */
+@keyframes drip-in{from{opacity:0;transform:translateY(calc(-12px * var(--moving))) scaleY(calc(1 + .14 * var(--moving)))}}
+.pane.is-active > *{animation:drip-in var(--t-spring) var(--spring-soft) backwards;transform-origin:50% 0}
+.pane.is-active > :nth-child(2){animation-delay:45ms}
+.pane.is-active > :nth-child(3){animation-delay:90ms}
+.pane.is-active > :nth-child(4){animation-delay:135ms}
+.pane.is-active > :nth-child(5){animation-delay:180ms}
+.pane.is-active > :nth-child(n+6){animation-delay:225ms}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
 .row.center{justify-content:center}
 .muted{color:var(--ink-dim);font-size:14px;margin:8px 0 0}
@@ -211,21 +236,25 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;back
 /* items */
 .items{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;max-height:min(46dvh,520px);overflow:auto;padding-right:2px}
 .item{display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:center}
-@keyframes chip-in{from{opacity:.4;transform:scale(calc(1 - .2 * var(--moving)))}}
-.item.fresh{animation:chip-in var(--dur-2) var(--ease-spring)}
-.item.leaving{animation:chip-out var(--dur-2) var(--ease) forwards;pointer-events:none}
-@keyframes chip-out{to{opacity:0;transform:scale(calc(1 - .15 * var(--moving))) translateX(calc(10px * var(--moving)));height:0;margin:0}}
+/* a blob: starts small and squashed, overshoots, settles */
+@keyframes blob-in{from{opacity:0;transform:scale(calc(1 - .45 * var(--moving)),calc(1 - .7 * var(--moving)))}}
+.item.fresh{animation:blob-in var(--t-spring) var(--spring);transform-origin:0 50%}
+/* a row that leaves shrinks to a line and is gone */
+.item.leaving{animation:shrink-out var(--dur-2) var(--ease) forwards;pointer-events:none;transform-origin:0 50%}
+@keyframes shrink-out{60%{opacity:.6;transform:scale(calc(1 - .5 * var(--moving)),calc(1 - .85 * var(--moving)))}to{opacity:0;transform:scale(calc(1 - .9 * var(--moving)),calc(1 - .9 * var(--moving)))}}
 .swatch{
   width:30px;height:30px;border-radius:50%;border:3px solid rgba(255,255,255,.7);background:var(--sw,var(--coral));
   box-shadow:0 2px 8px rgba(42,24,56,.2);padding:0;
 }
-.swatch{transition:transform var(--dur-1) var(--ease)}
+.swatch{transition:transform var(--t-spring) var(--spring)}
 .swatch:hover{transform:translateY(calc(-2px * var(--moving))) scale(calc(1 + .08 * var(--moving)))}
-.swatch:active{transform:scale(calc(1 - .06 * var(--moving)));transition-duration:60ms}
+.swatch:active{transform:scale(calc(1 + .12 * var(--moving)),calc(1 - .16 * var(--moving)));transition-duration:70ms}
 .item input[type="text"]{
-  width:100%;min-width:0;background:var(--field);border:1px solid var(--field-line);border-radius:12px;padding:9px 12px;font-weight:700;
+  width:100%;min-width:0;border:1px solid var(--field-line);border-radius:12px;padding:9px 12px;font-weight:700;
+  background:linear-gradient(90deg,var(--sky),var(--lilac)) center bottom/0% 2px no-repeat, var(--field);
+  transition:background-size var(--t-spring) var(--spring),border-color var(--dur-2) var(--ease);
 }
-.item input[type="text"]:focus{border-color:var(--sky);outline:none}
+.item input[type="text"]:focus{border-color:var(--sky);outline:none;background-size:82% 2px, auto}
 .weight{display:inline-flex;align-items:center;border:1px solid var(--field-line);border-radius:999px;background:var(--field);height:34px}
 .weight button{width:30px;height:32px;border:0;background:none;font-weight:800;font-size:16px;color:var(--ink-dim);border-radius:999px}
 .weight button:hover{color:var(--ink);background:var(--chip)}
@@ -243,20 +272,29 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;back
 .muted.top{margin-top:4px}
 .count{display:flex;align-items:center;gap:10px;font-weight:700}
 .weight span.plain::before{content:""}
-.seg{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:12px;padding:5px;border-radius:16px;background:var(--chip)}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:12px;padding:5px;border-radius:16px;background:var(--chip);position:relative}
+/* the thumb slides over with a spring and squishes on the way */
+.seg::before{content:"";position:absolute;top:5px;bottom:5px;left:5px;width:calc(50% - 8px);border-radius:12px;background:var(--frost-strong);border:1px solid var(--frost-line);box-shadow:0 4px 14px rgba(42,24,56,.12);
+  transition:left var(--t-spring) var(--spring)}
+.seg.is-all::before{left:calc(50% + 3px)}
+.seg.squish::before{animation:thumb-squish 380ms var(--ease-out)}
+@keyframes thumb-squish{35%{transform:scale(calc(1 + .16 * var(--moving)),calc(1 - .14 * var(--moving)))}}
 .seg-btn{border:1px solid transparent;border-radius:12px;background:transparent;padding:9px 10px;font-weight:800;font-size:14px;color:var(--ink-dim);display:flex;flex-direction:column;align-items:center;gap:2px;line-height:1.2}
 .seg-btn small{font-weight:500;font-size:12px;color:var(--ink-faint)}
 .seg-btn{transition:background var(--dur-2) var(--ease),color var(--dur-2) var(--ease),transform var(--dur-1) var(--ease)}
 .seg-btn:active{transform:scale(calc(1 - .03 * var(--moving)))}
-.seg-btn.is-on{background:var(--frost-strong);color:var(--ink);border-color:var(--frost-line);box-shadow:0 4px 14px rgba(42,24,56,.12)}
+.seg-btn{position:relative;z-index:1}
+.seg-btn.is-on{color:var(--ink)}
 .seg-btn.is-on small{color:var(--ink-dim)}
-.team .members button.pop{animation:pop .35s cubic-bezier(.2,1.4,.4,1) both}
+.team .members button.pop{animation:blob-in var(--t-spring) var(--spring) both}
 .teamlist{list-style:none;margin:12px 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
 .team{border-radius:var(--radius-s);padding:10px 10px 8px;background:var(--field);border:1px solid var(--field-line);border-top:4px solid var(--tc,var(--coral));min-height:72px}
 .team{transition:opacity var(--dur-3) var(--ease),transform var(--dur-2) var(--ease)}
 .team.is-full{opacity:.6;transform:scale(calc(1 - .02 * var(--moving)))}
-.team input{width:100%;background:transparent;border:0;border-bottom:1px dashed var(--field-line);font-weight:800;padding:2px 0 4px;margin-bottom:6px;color:var(--ink)}
-.team input:focus{outline:none;border-bottom-style:solid}
+.team input{width:100%;border:0;border-radius:0;font-weight:800;padding:2px 0 5px;margin-bottom:6px;color:var(--ink);
+  background:linear-gradient(var(--tc),var(--tc)) left bottom/0% 2px no-repeat, linear-gradient(var(--field-line),var(--field-line)) left bottom/40% 2px no-repeat;
+  transition:background-size var(--t-spring) var(--spring)}
+.team input:focus{outline:none;background-size:100% 2px, 100% 2px}
 .team .members{display:flex;flex-wrap:wrap;gap:4px;min-height:22px}
 .team .members button{border:0;border-radius:999px;background:var(--tc);color:var(--plum);font-weight:700;font-size:13px;padding:3px 9px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .team .members button:hover{filter:brightness(1.08)}
@@ -292,12 +330,19 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;back
 #savedEmpty[hidden]{display:none}
 
 /* settings */
-.setting{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--field-line)}
+.setting{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;
+  background:linear-gradient(var(--field-line),var(--field-line)) left bottom/100% 1px no-repeat}
+@keyframes line-draw{from{background-size:0% 1px}}
+.pane.is-active > .setting{animation:drip-in var(--t-spring) var(--spring-soft) backwards, line-draw 700ms var(--ease-out) backwards}
 .setting>span{display:flex;flex-direction:column;font-weight:700}
 .setting small{color:var(--ink-dim);font-weight:500;font-size:13px}
 .setting select{background:var(--field);border:1px solid var(--field-line);border-radius:10px;padding:8px 10px;max-width:55%}
-.switch input{appearance:none;width:48px;height:28px;border-radius:999px;background:var(--chip);border:1px solid var(--field-line);position:relative;flex:none;margin:0;transition:background .15s}
-.switch input::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.25);transition:transform .15s}
+.switch input{appearance:none;width:48px;height:28px;border-radius:999px;background:var(--chip);border:1px solid var(--field-line);position:relative;flex:none;margin:0;transition:background var(--dur-2) var(--ease)}
+.switch input::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:999px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.25);
+  transition:transform var(--t-spring) var(--spring),width var(--dur-2) var(--ease-out)}
+/* pressed, the knob stretches toward where it is going */
+.switch input:active::after{width:calc(20px + 8px * var(--moving))}
+.switch input:checked:active::after{transform:translateX(calc(20px - 8px * var(--moving)))}
 .switch input:checked{background:linear-gradient(135deg,var(--coral),var(--mango))}
 .switch input:checked::after{transform:translateX(20px)}
 
@@ -308,9 +353,18 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;back
 #confetti{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .winner{
   position:relative;border-radius:28px;padding:28px 28px 20px;text-align:center;max-width:min(92vw,560px);width:100%;
-  background:var(--frost-strong);animation:pop var(--dur-4) var(--ease-spring);
+  background:var(--frost-strong);animation:pop var(--t-spring) var(--spring);touch-action:none;cursor:grab;
 }
-@keyframes pop{from{transform:scale(calc(1 - .2 * var(--moving)));opacity:0}to{transform:scale(1);opacity:1}}
+.winner.is-pulled{cursor:grabbing}
+.winner button{cursor:pointer}
+/* the handle: a short line that stretches while you pull the card */
+.winner::before{content:"";position:absolute;top:10px;left:50%;width:calc(40px + var(--pull,0) * 60px);height:4px;margin-left:calc(-20px - var(--pull,0) * 30px);border-radius:999px;background:var(--ink-faint);opacity:.55;transition:width var(--t-spring) var(--spring),margin-left var(--t-spring) var(--spring)}
+.winner.is-pulled::before{transition:none}
+@keyframes pop{from{transform:scale(calc(1 - .35 * var(--moving)),calc(1 - .5 * var(--moving)));opacity:0}}
+@keyframes pull-up{from{opacity:0;transform:translateY(calc(22px * var(--moving))) scaleY(calc(1 + .25 * var(--moving)))}}
+.winner-text{animation:pull-up var(--t-spring) var(--spring) 90ms backwards;transform-origin:50% 100%}
+.winner-sub{animation:pull-up var(--t-spring) var(--spring-soft) 170ms backwards}
+.winner .row{animation:pull-up var(--t-spring) var(--spring-soft) 230ms backwards}
 .winner-kicker{margin:0;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-dim);font-weight:800}
 .winner-text{
   margin:8px 0 4px;font-family:"Unbounded",sans-serif;font-weight:800;font-size:clamp(28px,7vw,56px);line-height:1.05;letter-spacing:-.02em;overflow-wrap:anywhere;color:var(--plum);
@@ -321,10 +375,10 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;back
 
 .toast{
   position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:60;
-  background:var(--plum);color:#FFF4E6;padding:10px 18px;border-radius:999px;font-weight:700;box-shadow:0 10px 30px rgba(0,0,0,.3);animation:notice-in var(--dur-3) var(--ease-out);
+  background:var(--plum);color:#FFF4E6;padding:10px 18px;border-radius:999px;font-weight:700;box-shadow:0 10px 30px rgba(0,0,0,.3);animation:notice-in var(--t-spring) var(--spring);
 }
 .toast[hidden]{display:none}
-@keyframes notice-in{from{opacity:0;transform:translate(-50%,calc(12px * var(--moving)))}}
+@keyframes notice-in{from{opacity:0;transform:translate(-50%,calc(18px * var(--moving))) scale(calc(1 - .35 * var(--moving)),calc(1 + .2 * var(--moving)))}}
 
 .foot{text-align:center;font-size:12.5px;color:var(--ink-faint);padding:6px 16px calc(14px + env(safe-area-inset-bottom))}
 .foot a{color:inherit}

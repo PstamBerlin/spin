@@ -359,7 +359,7 @@
         el.againBtn.textContent = left ? "Next name" : "Show the teams";
       }
       el.removeAgainBtn.hidden = true;
-      el.overlay.hidden = false; el.againBtn.focus();
+      resetCard(); el.overlay.hidden = false; el.againBtn.focus();
       playWin(); confetti(col);
       renderTeams(); changed();
       return;
@@ -367,7 +367,7 @@
     el.againBtn.textContent = "Spin again"; el.removeAgainBtn.hidden = false;
     el.winnerText.textContent = win.t.trim() || "(blank)";
     el.winnerSub.textContent = state.remove ? "This one leaves the wheel now." : "";
-    el.overlay.hidden = false; el.againBtn.focus();
+    resetCard(); el.overlay.hidden = false; el.againBtn.focus();
     pushHistory(win); playWin(); confetti(col);
     if (state.remove) { removeItem(win); }
   }
@@ -507,6 +507,7 @@
       li.append(name, members, size); el.teamList.appendChild(li);
     }
     popFrom = -1;
+    el.modeOne.parentElement.classList.toggle("is-all", !!T.all);
     el.modeOne.classList.toggle("is-on", !T.all); el.modeOne.setAttribute("aria-checked", String(!T.all));
     el.modeAll.classList.toggle("is-on", !!T.all); el.modeAll.setAttribute("aria-checked", String(!!T.all));
   }
@@ -526,8 +527,9 @@
   el.teamNames.addEventListener("input", () => { clearTimeout(namesTimer); namesTimer = setTimeout(() => { setNames(el.teamNames.value.split(/\r?\n|,|;/).map((x) => x.trim()).filter(Boolean)); renderTeams(); changed(); }, 250); });
   el.teamsMinus.addEventListener("click", () => { const T = state.teams; T.count = Math.max(2, T.count - 1); T.assigned = T.assigned.map((t) => (t >= T.count ? -1 : t)); renderTeams(); changed(); });
   el.teamsPlus.addEventListener("click", () => { state.teams.count = Math.min(8, state.teams.count + 1); renderTeams(); changed(); });
-  el.modeOne.addEventListener("click", () => { state.teams.all = false; renderTeams(); changed(); });
-  el.modeAll.addEventListener("click", () => { state.teams.all = true; renderTeams(); changed(); });
+  function squishSeg() { const g = el.modeOne.parentElement; g.classList.remove("squish"); void g.offsetWidth; g.classList.add("squish"); }
+  el.modeOne.addEventListener("click", () => { if (state.teams.all) squishSeg(); state.teams.all = false; renderTeams(); changed(); });
+  el.modeAll.addEventListener("click", () => { if (!state.teams.all) squishSeg(); state.teams.all = true; renderTeams(); changed(); });
   el.teamsShuffle.addEventListener("click", () => { const T = state.teams; const pairs = T.names.map((n, i) => [n, T.assigned[i]]); for (let i = pairs.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pairs[i], pairs[j]] = [pairs[j], pairs[i]]; } T.names = pairs.map((p) => p[0]); T.assigned = pairs.map((p) => p[1]); renderTeams(); changed(); });
   el.teamsReset.addEventListener("click", () => { state.teams.assigned = state.teams.names.map(() => -1); history = []; renderHistory(); renderTeams(); changed(); });
 
@@ -614,6 +616,42 @@
   el.bigBtn.addEventListener("click", () => setBig(!document.body.classList.contains("big")));
   document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement && document.body.classList.contains("big")) setBig(false); });
 
+  // pull: the big buttons lean toward the pointer and spring back when it leaves
+  if (!reduceMotion && matchMedia("(hover: hover) and (pointer: fine)").matches) {
+    document.querySelectorAll(".btn-primary, .hub, .icon-btn").forEach((b) => {
+      const k = b.classList.contains("hub") ? 0.16 : b.classList.contains("icon-btn") ? 0.3 : 0.22;
+      b.addEventListener("pointermove", (e) => {
+        if (b.disabled) return;
+        const r = b.getBoundingClientRect();
+        b.classList.add("pulling");
+        b.style.setProperty("--mx", ((e.clientX - (r.left + r.width / 2)) * k).toFixed(1) + "px");
+        b.style.setProperty("--my", ((e.clientY - (r.top + r.height / 2)) * k).toFixed(1) + "px");
+      });
+      b.addEventListener("pointerleave", () => { b.classList.remove("pulling"); b.style.setProperty("--mx", "0px"); b.style.setProperty("--my", "0px"); });
+    });
+  }
+  // pull the winner card down to dismiss it; it stretches like rubber and springs back if you let go early
+  const card = document.querySelector(".winner"); let pull = null;
+  function resetCard() { card.classList.remove("is-pulled"); card.style.transition = ""; card.style.transform = ""; card.style.opacity = ""; card.style.removeProperty("--pull"); }
+  card.addEventListener("pointerdown", (e) => { if (e.target.closest("button")) return; pull = { y: e.clientY, d: 0 }; try { card.setPointerCapture(e.pointerId); } catch (err) {} card.classList.add("is-pulled"); card.style.transition = "none"; });
+  card.addEventListener("pointermove", (e) => {
+    if (!pull) return;
+    const d = e.clientY - pull.y; pull.d = d;
+    const y = d > 0 ? d * 0.6 : -Math.pow(-d, 0.7);
+    const k = Math.min(1, Math.abs(y) / 140);
+    card.style.transform = "translateY(" + y.toFixed(1) + "px) scale(" + (1 - 0.05 * k).toFixed(3) + "," + (1 + 0.05 * k).toFixed(3) + ")";
+    card.style.opacity = d > 0 ? String(Math.max(0.45, 1 - d / 420)) : "1";
+    card.style.setProperty("--pull", k.toFixed(2));
+  });
+  function endPull() {
+    if (!pull) return; const d = pull.d; pull = null;
+    card.classList.remove("is-pulled"); card.style.setProperty("--pull", "0");
+    card.style.transition = "transform var(--t-spring) var(--spring), opacity 200ms ease";
+    if (d > 110) { card.style.transition = "transform 200ms var(--ease), opacity 200ms ease"; card.style.transform = "translateY(60vh) scale(.9)"; card.style.opacity = "0"; setTimeout(() => { closeWinner(); resetCard(); }, 190); }
+    else { card.style.transform = ""; card.style.opacity = ""; }
+  }
+  card.addEventListener("pointerup", endPull); card.addEventListener("pointercancel", endPull);
+
   // tabs
   let activeTab = "options";
   function setTab(name) {
@@ -625,14 +663,21 @@
     if (name === "teams") { renderTeams(); setMode("teams"); } if (name === "options") setMode("wheel");
   }
   document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => setTab(t.dataset.tab)));
-  // the glider slides under the active tab (Chalkboard's pill, flattened to a line)
+  // the tab line is liquid: it stretches across both tabs, then shrinks onto the new one
   const tabsEl = document.querySelector(".tabs"); const glider = document.createElement("span"); glider.className = "tab-glider"; tabsEl.appendChild(glider);
+  let gliderT = 0;
   function placeGlider(animate) {
     const t = tabsEl.querySelector(".tab.is-active"); if (!t) return;
-    if (!animate) glider.style.transition = "none";
-    glider.style.left = (t.offsetLeft) + "px"; glider.style.width = t.offsetWidth + "px";
-    tabsEl.classList.add("has-glider");
-    if (!animate) { void glider.offsetWidth; glider.style.transition = ""; }
+    const L = t.offsetLeft + 10, W = Math.max(8, t.offsetWidth - 20);
+    tabsEl.classList.add("has-glider"); clearTimeout(gliderT);
+    const curL = parseFloat(glider.style.left), curW = parseFloat(glider.style.width);
+    if (!animate || reduceMotion || !(curW > 0)) {
+      glider.className = "tab-glider"; glider.style.left = L + "px"; glider.style.width = W + "px";
+    } else {
+      const uL = Math.min(curL, L), uR = Math.max(curL + curW, L + W);
+      glider.className = "tab-glider stretch"; glider.style.left = uL + "px"; glider.style.width = (uR - uL) + "px";
+      gliderT = setTimeout(() => { glider.className = "tab-glider settle"; glider.style.left = L + "px"; glider.style.width = W + "px"; }, 150);
+    }
     t.scrollIntoView({ block: "nearest", inline: "nearest", behavior: animate && !reduceMotion ? "smooth" : "auto" });
   }
   window.addEventListener("resize", () => placeGlider(false));

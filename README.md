@@ -14,6 +14,7 @@ Live at spin.peterstam.eu. No accounts, no ads, no server: the whole wheel is pa
 
     python3 -m http.server 8771 --bind 127.0.0.1 --directory docs
     python3 tests/spin_test.py
+    python3 tests/motion_test.py
 
 The test drives a headless Chrome through the wheel: spin, winner, history, link round-trip,
 paste list with weights, QR code, saved wheels, remove-winner mode, theme, drag fling, big mode, phone width.
