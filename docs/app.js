@@ -124,9 +124,10 @@
     g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + t + dur);
     o.connect(g).connect(ctx.destination); o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + dur + 0.02);
   }
+  const noiseBufs = new Map();
   function noise(ctx, { t = 0, dur = 0.05, gain = 0.15, hp = 1000 }) {
-    const n = Math.floor(ctx.sampleRate * dur), buf = ctx.createBuffer(1, n, ctx.sampleRate), d = buf.getChannelData(0);
-    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const n = Math.floor(ctx.sampleRate * dur), key = n + "@" + ctx.sampleRate; let buf = noiseBufs.get(key);
+    if (!buf) { buf = ctx.createBuffer(1, n, ctx.sampleRate); const d = buf.getChannelData(0); for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n); noiseBufs.set(key, buf); }
     const src = ctx.createBufferSource(); src.buffer = buf;
     const f = ctx.createBiquadFilter(); f.type = "highpass"; f.frequency.value = hp;
     const g = ctx.createGain(); g.gain.value = gain;
@@ -146,7 +147,12 @@
       win(ctx) { [784, 988, 1175, 1568].forEach((f, i) => { tone(ctx, { f, type: "sine", t: i * 0.12, dur: 1.1, gain: 0.14 }); tone(ctx, { f: f * 2.01, type: "sine", t: i * 0.12, dur: 0.5, gain: 0.04 }); }); },
     },
   };
-  function playTick(speed) { const ctx = audio(); if (ctx) SOUNDS[state.sound].tick(ctx, speed); if (navigator.vibrate && !reduceMotion) { try { navigator.vibrate(6); } catch (e) {} } }
+  let lastTickAt = 0, lastBuzzAt = 0;
+  function playTick(speed) {
+    const now = performance.now(); if (now - lastTickAt < 38) return; lastTickAt = now;
+    const ctx = audio(); if (ctx) SOUNDS[state.sound].tick(ctx, speed);
+    if (navigator.vibrate && !reduceMotion && now - lastBuzzAt > 90 && Math.abs(speed) < 9) { lastBuzzAt = now; try { navigator.vibrate(5); } catch (e) {} }
+  }
   function playWin() { const ctx = audio(); if (ctx) SOUNDS[state.sound].win(ctx); }
 
   // ---------- wheel ----------
@@ -159,6 +165,9 @@
   let intro = { t0: performance.now(), dur: 700 };   // entrance animation
   let glow = null;                      // {idx, until}: the winning slice glows after the card closes
   const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // lite: phones and tablets. Same app, but nothing that makes the graphics chip redo the whole screen every frame.
+  const lite = matchMedia("(pointer: coarse)").matches || /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+  if (lite) document.documentElement.classList.add("lite");
 
   function slices() {
     if (state.mode === "teams") {
@@ -184,7 +193,10 @@
   const layIds = new WeakMap(); let layNext = 1;
   function layKey(it) { if (it.team != null) return "t" + it.team; let id = layIds.get(it); if (!id) { id = layNext++; layIds.set(it, id); } return id; }
   const lay = { sig: null, from: new Map(), cur: new Map(), t0: 0 }; let layBusy = false;
+  let layDirty = true, layOut = null;
   function layout(target) {
+    if (!layDirty && !layBusy && layOut && layOut.length === target.length) return layOut;
+    layDirty = false;
     const now = performance.now();
     const sig = target.map((t) => layKey(t.it) + ":" + t.start.toFixed(4) + ":" + t.end.toFixed(4)).join("|");
     if (sig !== lay.sig) {
@@ -196,11 +208,12 @@
     const cur = new Map();
     const out = target.map((t) => { const key = layKey(t.it), f = lay.from.get(key); const st = f.start + (t.start - f.start) * e, en = f.end + (t.end - f.end) * e; cur.set(key, { start: st, end: en }); return { it: t.it, start: st, end: en, mid: (st + en) / 2 }; });
     lay.cur = cur; layBusy = k < 1; if (layBusy) tick();
-    return out;
+    layOut = out; return out;
   }
   function resize() {
     const r = el.wrap.getBoundingClientRect();
-    dpr = Math.min(2.5, window.devicePixelRatio || 1);
+    dpr = Math.min(lite ? 2 : 2.5, window.devicePixelRatio || 1);
+    fitCache.clear(); hiGrad = null;
     size = Math.max(200, Math.floor(r.width));
     el.canvas.width = Math.floor(size * dpr); el.canvas.height = Math.floor(size * dpr);
     draw();
@@ -212,9 +225,7 @@
     if (intro) { const k = Math.min(1, (performance.now() - intro.t0) / intro.dur); scale = reduceMotion ? 1 : 0.72 + 0.28 * (1 - Math.pow(1 - k, 3)) * (1 + 0.08 * Math.sin(k * Math.PI)); if (k >= 1) intro = null; }
     const R = (c - c * 0.06) * scale;
     const x = ctx2d; x.setTransform(dpr, 0, 0, dpr, 0, 0); x.clearRect(0, 0, size, size);
-    // soft shadow under the wheel
-    x.save(); x.translate(c, c);
-    x.beginPath(); x.arc(0, c * 0.03, R + c * 0.045, 0, TAU); x.fillStyle = "rgba(42,24,56,.28)"; x.filter = "blur(" + c * 0.06 + "px)"; x.fill(); x.filter = "none";
+    x.save(); x.translate(c, c);   // (the soft shadow under the wheel is a static CSS layer, not redrawn per frame)
     // outer glass ring
     x.beginPath(); x.arc(0, 0, R + c * 0.045, 0, TAU); x.fillStyle = "rgba(42,24,56,.9)"; x.fill();
     x.beginPath(); x.arc(0, 0, R + c * 0.045, 0, TAU); x.lineWidth = 2; x.strokeStyle = "rgba(255,255,255,.35)"; x.stroke();
@@ -253,19 +264,27 @@
     if (n > 1) for (const s of sl) { x.beginPath(); x.arc(Math.cos(s.start) * (R + c * 0.02), Math.sin(s.start) * (R + c * 0.02), c * 0.012, 0, TAU); x.fillStyle = "rgba(255,255,255,.75)"; x.fill(); }
     // glass highlight (frost)
     x.rotate(-angle);
-    const g = x.createRadialGradient(-R * 0.4, -R * 0.5, 0, 0, 0, R * 1.1);
-    g.addColorStop(0, "rgba(255,255,255,.2)"); g.addColorStop(0.5, "rgba(255,255,255,.03)"); g.addColorStop(1, "rgba(255,255,255,0)");
-    x.beginPath(); x.arc(0, 0, R, 0, TAU); x.fillStyle = g; x.fill();
+    if (!hiGrad || hiGrad.R !== R) {
+      const g = x.createRadialGradient(-R * 0.4, -R * 0.5, 0, 0, 0, R * 1.1);
+      g.addColorStop(0, "rgba(255,255,255,.2)"); g.addColorStop(0.5, "rgba(255,255,255,.03)"); g.addColorStop(1, "rgba(255,255,255,0)");
+      hiGrad = { R, g };
+    }
+    x.beginPath(); x.arc(0, 0, R, 0, TAU); x.fillStyle = hiGrad.g; x.fill();
     x.restore();
     // pointer with flex
     x.save(); x.translate(c, c * 0.045);
     x.rotate(flex * 0.35 * flexDir);
     x.beginPath(); x.moveTo(-c * 0.07, -c * 0.02); x.lineTo(c * 0.07, -c * 0.02); x.lineTo(0, c * 0.11); x.closePath();
-    x.fillStyle = "#FFF4E6"; x.shadowColor = "rgba(42,24,56,.4)"; x.shadowBlur = 8; x.shadowOffsetY = 3; x.fill();
-    x.shadowColor = "transparent"; x.lineWidth = 2; x.strokeStyle = PLUM; x.stroke();
+    x.save(); x.translate(0, 3); x.fillStyle = "rgba(42,24,56,.28)"; x.fill(); x.restore();
+    x.fillStyle = "#FFF4E6"; x.fill(); x.lineWidth = 2; x.strokeStyle = PLUM; x.stroke();
     x.restore();
   }
+  const fitCache = new Map(); let hiGrad = null;
   function fit(x, text, maxW) {
+    const key = x.font + "|" + Math.round(maxW) + "|" + text; const hit = fitCache.get(key); if (hit !== undefined) return hit;
+    const out = fitRaw(x, text, maxW); if (fitCache.size > 600) fitCache.clear(); fitCache.set(key, out); return out;
+  }
+  function fitRaw(x, text, maxW) {
     if (x.measureText(text).width <= maxW) return text;
     let lo = 0, hi = text.length;
     while (lo < hi) { const m = (lo + hi + 1) >> 1; if (x.measureText(text.slice(0, m) + "…").width <= maxW) lo = m; else hi = m - 1; }
@@ -424,10 +443,10 @@
   let confRaf = 0, parts = [];
   function confetti(mainColor) {
     const cv = el.confetti, x = cv.getContext("2d");
-    cv.width = innerWidth * dpr; cv.height = innerHeight * dpr; x.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const cd = lite ? 1 : Math.min(2, dpr); cv.width = innerWidth * cd; cv.height = innerHeight * cd; x.setTransform(cd, 0, 0, cd, 0, 0);
     parts = [];
     const colors = [mainColor, ...PALETTE];
-    for (let i = 0; i < (reduceMotion ? 40 : 160); i++) parts.push({
+    for (let i = 0; i < (reduceMotion ? 40 : lite ? 80 : 160); i++) parts.push({
       x: innerWidth / 2 + (Math.random() - 0.5) * 80, y: innerHeight / 2, vx: (Math.random() - 0.5) * 16, vy: -6 - Math.random() * 12,
       w: 6 + Math.random() * 8, h: 4 + Math.random() * 6, r: Math.random() * TAU, vr: (Math.random() - 0.5) * 0.3, c: colors[i % colors.length], life: 1,
     });
@@ -435,18 +454,20 @@
     cancelAnimationFrame(confRaf);
     const step = (t) => {
       const dt = Math.min(0.05, (t - last) / 1000); last = t;
-      x.clearRect(0, 0, innerWidth, innerHeight);
+      x.setTransform(cd, 0, 0, cd, 0, 0); x.globalAlpha = 1; x.clearRect(0, 0, innerWidth, innerHeight);
       let alive = 0;
       for (const p of parts) {
         p.vy += 22 * dt; p.x += p.vx * 60 * dt * 0.5; p.y += p.vy * 60 * dt * 0.5; p.r += p.vr; p.vx *= 0.995; p.life -= dt * 0.35;
         if (p.life <= 0 || p.y > innerHeight + 20) continue; alive++;
-        x.save(); x.translate(p.x, p.y); x.rotate(p.r); x.globalAlpha = Math.min(1, p.life * 2); x.fillStyle = p.c; x.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); x.restore();
+        const cs = Math.cos(p.r), sn = Math.sin(p.r); x.setTransform(cd * cs, cd * sn, -cd * sn, cd * cs, cd * p.x, cd * p.y);
+        x.globalAlpha = Math.min(1, p.life * 2); x.fillStyle = p.c; x.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
       }
+      x.setTransform(cd, 0, 0, cd, 0, 0); x.globalAlpha = 1;
       if (alive > 0 && !el.overlay.hidden) confRaf = requestAnimationFrame(step); else x.clearRect(0, 0, innerWidth, innerHeight);
     };
     confRaf = requestAnimationFrame(step);
   }
-  function stopConfetti() { cancelAnimationFrame(confRaf); const x = el.confetti.getContext("2d"); x.clearRect(0, 0, el.confetti.width, el.confetti.height); }
+  function stopConfetti() { cancelAnimationFrame(confRaf); const x = el.confetti.getContext("2d"); x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, el.confetti.width, el.confetti.height); }
 
   // ---------- options editor ----------
   function renderItems() {
@@ -497,7 +518,7 @@
   el.title.addEventListener("input", () => { state.title = el.title.value; changed(); });
 
   function changed() {
-    lastIdx = -1; revealed = false; glow = null; draw(); syncUrl();
+    lastIdx = -1; revealed = false; glow = null; layDirty = true; draw(); syncUrl();
     const ok = canSpin(); el.spinBtn.disabled = !ok || spinning; el.hub.disabled = !ok || spinning; el.emptyHint.hidden = ok;
     el.emptyHint.textContent = state.mode === "teams" ? (state.teams.names.length < 2 ? "Add at least two names in the Teams tab." : "Everyone is placed. Start over to split again.") : "Add at least two options to spin.";
     el.shuffleBtn.hidden = state.mode === "teams";
@@ -644,7 +665,7 @@
     { sel: ".panel", blur: 9, edge: 20, scale: 60, sat: 1.8 },
     { sel: ".history", blur: 8, edge: 12, scale: 40, sat: 1.8 },
     { sel: ".winner", blur: 14, edge: 22, scale: 70, sat: 1.9 },
-    { sel: ".hub", blur: 1.2, edge: 16, scale: 54, sat: 1.5 },
+    { sel: ".hub", blur: 1.2, edge: 16, scale: 54, sat: 1.5, lite: true },
     { sel: "#spinBtn", blur: 5, edge: 10, scale: 34, sat: 1.8 },
     { sel: "#shuffleBtn", blur: 5, edge: 10, scale: 34, sat: 1.8 },
   ];
@@ -680,14 +701,14 @@
     if (glass && canLens) {
       if (!lensSvg) { lensSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); lensSvg.setAttribute("width", "0"); lensSvg.setAttribute("height", "0"); lensSvg.style.position = "absolute"; lensSvg.setAttribute("aria-hidden", "true"); document.body.appendChild(lensSvg); }
       lensRO = new ResizeObserver((entries) => entries.forEach((en) => { const i = LENSES.findIndex((c) => en.target.matches(c.sel)); if (i >= 0) setLens(en.target, LENSES[i], i); }));
-      LENSES.forEach((cfg) => { const n = document.querySelector(cfg.sel); if (n) lensRO.observe(n); });
+      LENSES.forEach((cfg) => { if (lite && !cfg.lite) return; const n = document.querySelector(cfg.sel); if (n) lensRO.observe(n); });
     }
     if (typeof placeGlider === "function") requestAnimationFrame(() => placeGlider(false));
   }
   el.lookSel.addEventListener("change", () => { prefs.look = el.lookSel.value; saveJSON(LS.prefs, prefs); applyLook(); });
   // the highlight on the glass follows the pointer
   let specRaf = 0;
-  window.addEventListener("pointermove", (e) => { if (specRaf || root.getAttribute("data-look") !== "glass") return; specRaf = requestAnimationFrame(() => { specRaf = 0; root.style.setProperty("--lx", e.clientX + "px"); root.style.setProperty("--ly", e.clientY + "px"); }); }, { passive: true });
+  if (!lite) window.addEventListener("pointermove", (e) => { if (specRaf || root.getAttribute("data-look") !== "glass") return; specRaf = requestAnimationFrame(() => { specRaf = 0; root.style.setProperty("--lx", e.clientX + "px"); root.style.setProperty("--ly", e.clientY + "px"); }); }, { passive: true });
 
   // big mode
   function setBig(on) {
@@ -797,5 +818,5 @@
   boot();
 
   // a tiny hook for tests
-  window.__spin = { get state() { return state; }, spin, encodeState, decodeState, get angle() { return angle; }, slices, indexAt, get spinning() { return spinning || !!windup; }, canLens, shown() { return [...lay.cur.values()]; } };
+  window.__spin = { get state() { return state; }, spin, encodeState, decodeState, get angle() { return angle; }, slices, indexAt, get spinning() { return spinning || !!windup; }, canLens, shown() { return [...lay.cur.values()]; }, bench(n) { const t0 = performance.now(); for (let i = 0; i < n; i++) { angle += 0.05; draw(); } return (performance.now() - t0) / n; } };
 })();

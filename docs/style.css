@@ -60,7 +60,7 @@ body{
   min-height:100dvh; display:flex; flex-direction:column;
 }
 button,input,select,textarea{font:inherit;color:inherit}
-button{cursor:pointer}
+button{cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;background:var(--chip);padding:1px 6px;border-radius:6px}
 :focus-visible{outline:3px solid var(--sky);outline-offset:2px;border-radius:8px}
 
@@ -170,7 +170,9 @@ body.big .wheel-wrap{animation:big-in var(--t-spring) var(--spring-soft)}
 .title:focus{background-size:100% 3px, 100% 3px;outline:none}
 @keyframes line-grow{from{background-size:0% 3px, 0% 3px}}
 .wheel-wrap{position:relative; width:min(100%, 560px, calc(100dvh - 300px)); min-width:240px; aspect-ratio:1; touch-action:none; user-select:none}
-#wheel{width:100%;height:100%;display:block;cursor:grab;border-radius:50%}
+/* the wheel's soft shadow: one static layer, never redrawn */
+.wheel-wrap::before{content:"";position:absolute;inset:5%;border-radius:50%;box-shadow:0 16px 44px rgba(42,24,56,.34);pointer-events:none;animation:fade var(--dur-4) var(--ease) 300ms backwards}
+#wheel{position:relative;width:100%;height:100%;display:block;cursor:grab;border-radius:50%}
 #wheel.is-dragging{cursor:grabbing}
 .hub{
   position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
@@ -184,9 +186,10 @@ body.big .wheel-wrap{animation:big-in var(--t-spring) var(--spring-soft)}
 .hub:hover{transform:translate(calc(-50% + var(--mx,0px)),calc(-50% + var(--my,0px))) scale(calc(1 + .04 * var(--moving)))}
 .hub:active{transform:translate(calc(-50% + var(--mx,0px)),calc(-50% + var(--my,0px))) scale(calc(1 + .05 * var(--moving)),calc(1 - .06 * var(--moving)));transition-duration:70ms}
 .hub:disabled{opacity:.75;cursor:not-allowed}
-.hub[aria-busy="true"]{animation:hubspin 1.2s linear infinite}
-@keyframes hubspin{from{box-shadow:0 10px 30px rgba(42,24,56,.35), inset 0 1px 0 rgba(255,255,255,.25)}50%{box-shadow:0 10px 40px rgba(255,107,107,.55), inset 0 1px 0 rgba(255,255,255,.25)}to{box-shadow:0 10px 30px rgba(42,24,56,.35), inset 0 1px 0 rgba(255,255,255,.25)}}
-@media (prefers-reduced-motion: reduce){.hub[aria-busy="true"]{animation:none}}
+.hub::after{content:"";position:absolute;inset:-4px;border-radius:50%;box-shadow:0 0 28px 6px rgba(255,59,92,.6);opacity:0;pointer-events:none;transition:opacity var(--dur-3) var(--ease)}
+.hub[aria-busy="true"]::after{animation:hubglow 900ms ease-in-out infinite alternate}
+@keyframes hubglow{from{opacity:.15}to{opacity:.85}}
+@media (prefers-reduced-motion: reduce){.hub[aria-busy="true"]::after{animation:none;opacity:.5}}
 .stage-row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
 .hint{margin:0;color:var(--ink-dim);animation:rise-in var(--dur-4) var(--ease-out) backwards}
 .hint[hidden]{display:none}
@@ -417,3 +420,20 @@ body.big .winner-text{font-size:clamp(40px,10vw,110px)}
   .item{grid-template-columns:auto 1fr auto}
   .item .weight{grid-column:2;justify-self:start}
 }
+
+/* ---- lite: phones and tablets ----
+   Nothing here changes how the app works. It only removes what makes a phone's graphics chip
+   redo the whole screen on every frame: the drifting blurred background, the grain blended over
+   everything, and frosted panels that have to re-blur whatever moves behind them. */
+:root.lite .mesh{filter:none;animation:none;inset:0;
+  background:
+    radial-gradient(60% 50% at 10% 12%, var(--mesh-a) 0%, transparent 78%),
+    radial-gradient(65% 50% at 92% 10%, var(--mesh-c) 0%, transparent 78%),
+    radial-gradient(75% 55% at 82% 92%, var(--mesh-b) 0%, transparent 78%),
+    radial-gradient(55% 50% at 12% 90%, var(--mesh-d) 0%, transparent 78%)}
+:root.lite .grain{display:none}
+:root.lite:not([data-look="glass"]) .frost{-webkit-backdrop-filter:none;backdrop-filter:none;background:var(--frost-strong)}
+:root.lite:not([data-look="glass"]) .winner{background:rgba(255,255,255,.94)}
+:root.lite[data-theme="dark"]:not([data-look="glass"]) .winner{background:rgba(42,24,56,.95)}
+@media (prefers-color-scheme: dark){:root.lite:not([data-theme="light"]):not([data-look="glass"]) .winner{background:rgba(42,24,56,.95)}}
+:root.lite .items{overscroll-behavior:contain}

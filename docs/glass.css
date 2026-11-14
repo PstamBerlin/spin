@@ -88,3 +88,17 @@
   -webkit-backdrop-filter:blur(16px) saturate(1.9) brightness(1.06); backdrop-filter:blur(16px) saturate(1.9) brightness(1.06)}
 :root[data-look="glass"] .toast{background:rgba(42,24,56,.5); -webkit-backdrop-filter:blur(12px) saturate(1.8); backdrop-filter:blur(12px) saturate(1.8);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.5), inset 0 0 0 1px rgba(255,255,255,.16), 0 10px 30px rgba(0,0,0,.3)}
+
+/* phones: the glass stays, the heavy parts go. Only the small hub keeps its bending lens (set in app.js);
+   the big panes get a lighter blur, buttons none, and the highlight is fixed in place instead of tracking. */
+:root.lite[data-look="glass"] .frost{-webkit-backdrop-filter:blur(6px) saturate(1.6);backdrop-filter:blur(6px) saturate(1.6)}
+:root.lite[data-look="glass"] .winner{-webkit-backdrop-filter:blur(10px) saturate(1.7);backdrop-filter:blur(10px) saturate(1.7)}
+:root.lite[data-look="glass"] .stage-row .btn,:root.lite[data-look="glass"] .toast{-webkit-backdrop-filter:none;backdrop-filter:none}
+:root.lite[data-look="glass"] .toast{background:rgba(42,24,56,.86)}
+:root.lite[data-look="glass"] .mesh{filter:none}
+:root.lite[data-look="glass"] :is(.bar,.panel,.history,.winner)::after{background:radial-gradient(120% 70% at 72% 0%, var(--g-spec), transparent 62%)}
+
+/* the winner's name sits on busy glass: solid ink with a soft halo, always readable */
+:root[data-look="glass"] .winner-text{background:none;-webkit-background-clip:border-box;background-clip:border-box;color:var(--ink);text-shadow:0 2px 16px rgba(255,255,255,.55)}
+:root[data-look="glass"][data-theme="dark"] .winner-text{text-shadow:0 2px 16px rgba(27,15,36,.7)}
+@media (prefers-color-scheme: dark){:root[data-look="glass"]:not([data-theme="light"]) .winner-text{text-shadow:0 2px 16px rgba(27,15,36,.7)}}
