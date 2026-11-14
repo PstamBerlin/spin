@@ -44,6 +44,9 @@
   }
   function freshTeams() { return { names: [], count: 2, labels: [], assigned: [], all: false }; }
   let popFrom = -1;   // names placed in a cascade get a pop animation
+  let popOne = -1;    // the one name a single spin just placed pops too
+  let teamsAppear = null;   // "all" or the index of a team card that should pop in
+  let cascadeItems = false; // the next full render of the option rows cascades in
   const TEAM_WORDS = ["Red", "Orange", "Yellow", "Mint", "Blue", "Violet", "Pink", "Green"];
   function teamLabel(i) { return (state.teams.labels[i] || "").trim() || "Team " + TEAM_WORDS[i % TEAM_WORDS.length]; }
   function teamSizes() { const z = new Array(state.teams.count).fill(0); state.teams.assigned.forEach((t) => { if (t >= 0 && t < z.length) z[t]++; }); return z; }
@@ -176,6 +179,25 @@
     for (let i = 0; i < sl.length; i++) if (a >= sl[i].start && a < sl[i].end) return i;
     return sl.length - 1;
   }
+  // Slices appear: on first draw the wheel fans open, and when options change the slices glide to make room
+  // (a new one grows out of the seam where it was added). Purely visual: the winner always comes from slices().
+  const layIds = new WeakMap(); let layNext = 1;
+  function layKey(it) { if (it.team != null) return "t" + it.team; let id = layIds.get(it); if (!id) { id = layNext++; layIds.set(it, id); } return id; }
+  const lay = { sig: null, from: new Map(), cur: new Map(), t0: 0 }; let layBusy = false;
+  function layout(target) {
+    const now = performance.now();
+    const sig = target.map((t) => layKey(t.it) + ":" + t.start.toFixed(4) + ":" + t.end.toFixed(4)).join("|");
+    if (sig !== lay.sig) {
+      const from = new Map(); let cursor = 0;
+      for (const t of target) { const k = layKey(t.it), c = lay.cur.get(k); if (c) { from.set(k, c); cursor = c.end; } else from.set(k, { start: cursor, end: cursor }); }
+      lay.from = from; lay.sig = sig; lay.t0 = now;
+    }
+    const k = reduceMotion ? 1 : Math.min(1, (now - lay.t0) / 460), e = 1 - Math.pow(1 - k, 3);
+    const cur = new Map();
+    const out = target.map((t) => { const key = layKey(t.it), f = lay.from.get(key); const st = f.start + (t.start - f.start) * e, en = f.end + (t.end - f.end) * e; cur.set(key, { start: st, end: en }); return { it: t.it, start: st, end: en, mid: (st + en) / 2 }; });
+    lay.cur = cur; layBusy = k < 1; if (layBusy) tick();
+    return out;
+  }
   function resize() {
     const r = el.wrap.getBoundingClientRect();
     dpr = Math.min(2.5, window.devicePixelRatio || 1);
@@ -184,7 +206,7 @@
     draw();
   }
   function draw() {
-    const sl = slices(); const n = sl.length;
+    const sl = layout(slices()); const n = sl.length;
     const c = size / 2;
     let scale = 1;
     if (intro) { const k = Math.min(1, (performance.now() - intro.t0) / intro.dur); scale = reduceMotion ? 1 : 0.72 + 0.28 * (1 - Math.pow(1 - k, 3)) * (1 + 0.08 * Math.sin(k * Math.PI)); if (k >= 1) intro = null; }
@@ -210,6 +232,7 @@
       x.lineWidth = n > 1 ? Math.max(1.5, c * 0.006) : 0; x.strokeStyle = "rgba(42,24,56,.85)"; if (n > 1) x.stroke();
       // label
       const span = s.end - s.start;
+      if (span < 0.06) continue;   // too thin for a label while it grows
       const label = showLabels ? s.it.t.trim() : "?";
       // labels always read left to right on screen: slices on the left half are drawn flipped
       const flip = Math.cos(s.mid + angle) < 0;
@@ -272,7 +295,7 @@
     }
     if (flex > 0) flex = Math.max(0, flex - dt * 7);
     draw();
-    const busy = spinning || drag || windup || intro || flex > 0 || (glow && glow.until > performance.now());
+    const busy = spinning || drag || windup || intro || layBusy || flex > 0 || (glow && glow.until > performance.now());
     if (busy) raf = requestAnimationFrame(frame); else raf = 0;
   }
   function tick() { if (!raf) { lastT = performance.now(); raf = requestAnimationFrame(frame); } }
@@ -344,7 +367,7 @@
     el.winnerText.style.setProperty("--w1", col); el.winnerText.style.setProperty("--w2", PALETTE[(win.c + 1) % PALETTE.length]);
     if (state.mode === "teams") {
       const ni = nextNameIndex(); const name = state.teams.names[ni];
-      state.teams.assigned[ni] = win.team;
+      state.teams.assigned[ni] = win.team; popOne = state.teams.all ? -1 : ni;
       pushHistory({ t: name + ": " + teamLabel(win.team), c: win.c });
       if (state.teams.all) {
         // one spin places everyone: the landed name goes to the landed team, the rest fill up the teams in balance
@@ -427,6 +450,7 @@
 
   // ---------- options editor ----------
   function renderItems() {
+    const cascade = cascadeItems && !reduceMotion; cascadeItems = false;
     el.items.innerHTML = "";
     state.items.forEach((it, i) => {
       const li = document.createElement("li"); li.className = "item";
@@ -445,6 +469,7 @@
       wt.append(minus, num, plus); wt.title = "Weight: how many slices this option gets";
       const del = document.createElement("button"); del.className = "del"; del.type = "button"; del.textContent = "×"; del.setAttribute("aria-label", "Remove option");
       del.addEventListener("click", () => { li.classList.add("leaving"); setTimeout(() => { const k = state.items.indexOf(it); if (k >= 0) state.items.splice(k, 1); renderItems(); changed(); }, reduceMotion ? 0 : 180); });
+      if (cascade) { li.classList.add("appear"); li.style.animationDelay = Math.min(i, 14) * 28 + "ms"; }
       li.append(sw, inp, wt, del); el.items.appendChild(li);
     });
   }
@@ -454,20 +479,21 @@
     const used = state.items.map((x) => x.c); let c = 0; for (let k = 0; k < PALETTE.length; k++) if (!used.includes(k)) { c = k; break; } if (used.length >= PALETTE.length) c = state.items.length % PALETTE.length;
     const idx = at == null ? state.items.length : at;
     // avoid two neighbours sharing a colour
-    const prev = state.items[idx - 1]; if (prev && prev.c === c) c = (c + 1) % PALETTE.length;
+    const prev = state.items[idx - 1] || state.items[state.items.length - 1], next = state.items[idx] || state.items[0];
+    for (let k = 0; k < PALETTE.length && ((prev && prev.c === c) || (next && next.c === c)); k++) c = (c + 1) % PALETTE.length;
     state.items.splice(idx, 0, { t: "", c, w: 1 }); renderItems(); changed(); focusItem(idx);
     const li = el.items.children[idx]; if (li) li.classList.add("fresh");
   }
   el.addBtn.addEventListener("click", () => addItem());
-  el.clearBtn.addEventListener("click", () => { state.items = [{ t: "", c: 0, w: 1 }, { t: "", c: 1, w: 1 }]; renderItems(); changed(); focusItem(0); });
+  el.clearBtn.addEventListener("click", () => { state.items = [{ t: "", c: 0, w: 1 }, { t: "", c: 1, w: 1 }]; cascadeItems = true; renderItems(); changed(); focusItem(0); });
   el.pasteToggle.addEventListener("click", () => { const open = el.pasteBox.hidden; el.pasteBox.hidden = !open; el.pasteToggle.setAttribute("aria-expanded", String(open)); if (open) { el.pasteArea.value = state.items.map((x) => x.t + (x.w > 1 ? " ×" + x.w : "")).join("\n"); el.pasteArea.focus(); } });
   el.pasteApply.addEventListener("click", () => {
     const lines = el.pasteArea.value.split(/\r?\n|,|;/).map((s) => s.trim()).filter(Boolean).slice(0, MAX_ITEMS);
     if (lines.length === 0) { toast("Nothing to use yet."); return; }
     state.items = lines.map((line, i) => { const m = line.match(/^(.*?)\s*[×x\*]\s*(\d)$/i); return { t: (m ? m[1] : line).slice(0, 60), c: i % PALETTE.length, w: m ? clampInt(m[2], 1, 9, 1) : 1 }; });
-    el.pasteBox.hidden = true; el.pasteToggle.setAttribute("aria-expanded", "false"); renderItems(); changed();
+    el.pasteBox.hidden = true; el.pasteToggle.setAttribute("aria-expanded", "false"); cascadeItems = true; renderItems(); changed();
   });
-  el.shuffleBtn.addEventListener("click", () => { for (let i = state.items.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [state.items[i], state.items[j]] = [state.items[j], state.items[i]]; } renderItems(); changed(); });
+  el.shuffleBtn.addEventListener("click", () => { for (let i = state.items.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [state.items[i], state.items[j]] = [state.items[j], state.items[i]]; } cascadeItems = true; renderItems(); changed(); });
   el.title.addEventListener("input", () => { state.title = el.title.value; changed(); });
 
   function changed() {
@@ -496,17 +522,19 @@
     el.teamList.innerHTML = "";
     for (let i = 0; i < T.count; i++) {
       const li = document.createElement("li"); li.className = "team" + (T.names.length && ni >= 0 && !teamOpen(i, sizes) ? " is-full" : ""); li.style.setProperty("--tc", PALETTE[i % PALETTE.length]);
+      if (!reduceMotion && (teamsAppear === "all" || teamsAppear === i)) { li.classList.add("appear"); li.style.animationDelay = (teamsAppear === "all" ? 80 + i * 45 : 0) + "ms"; }
       const name = document.createElement("input"); name.type = "text"; name.maxLength = 24; name.value = T.labels[i] || ""; name.placeholder = teamLabel(i); name.setAttribute("aria-label", "Name of team " + (i + 1));
       name.addEventListener("input", () => { T.labels[i] = name.value; changed(); });
       const members = document.createElement("div"); members.className = "members";
       let order = 0;
       T.assigned.forEach((t, k) => { if (t !== i) return; const b = document.createElement("button"); b.type = "button"; b.textContent = T.names[k]; b.title = "Move to the next team";
         if (popFrom >= 0 && !reduceMotion) { b.classList.add("pop"); b.style.animationDelay = (k * 90) + "ms"; }
+        else if (k === popOne && !reduceMotion) b.classList.add("pop");
         b.addEventListener("click", () => { T.assigned[k] = (t + 1) % T.count; renderTeams(); changed(); }); members.appendChild(b); });
       const size = document.createElement("div"); size.className = "size"; size.textContent = sizes[i] + (sizes[i] === 1 ? " name" : " names");
       li.append(name, members, size); el.teamList.appendChild(li);
     }
-    popFrom = -1;
+    popFrom = -1; popOne = -1; teamsAppear = null;
     el.modeOne.parentElement.classList.toggle("is-all", !!T.all);
     el.modeOne.classList.toggle("is-on", !T.all); el.modeOne.setAttribute("aria-checked", String(!T.all));
     el.modeAll.classList.toggle("is-on", !!T.all); el.modeAll.setAttribute("aria-checked", String(!!T.all));
@@ -526,7 +554,7 @@
   let namesTimer = 0;
   el.teamNames.addEventListener("input", () => { clearTimeout(namesTimer); namesTimer = setTimeout(() => { setNames(el.teamNames.value.split(/\r?\n|,|;/).map((x) => x.trim()).filter(Boolean)); renderTeams(); changed(); }, 250); });
   el.teamsMinus.addEventListener("click", () => { const T = state.teams; T.count = Math.max(2, T.count - 1); T.assigned = T.assigned.map((t) => (t >= T.count ? -1 : t)); renderTeams(); changed(); });
-  el.teamsPlus.addEventListener("click", () => { state.teams.count = Math.min(8, state.teams.count + 1); renderTeams(); changed(); });
+  el.teamsPlus.addEventListener("click", () => { const was = state.teams.count; state.teams.count = Math.min(8, was + 1); if (state.teams.count > was) teamsAppear = was; renderTeams(); changed(); });
   function squishSeg() { const g = el.modeOne.parentElement; g.classList.remove("squish"); void g.offsetWidth; g.classList.add("squish"); }
   el.modeOne.addEventListener("click", () => { if (state.teams.all) squishSeg(); state.teams.all = false; renderTeams(); changed(); });
   el.modeAll.addEventListener("click", () => { if (!state.teams.all) squishSeg(); state.teams.all = true; renderTeams(); changed(); });
@@ -534,13 +562,13 @@
   el.teamsReset.addEventListener("click", () => { state.teams.assigned = state.teams.names.map(() => -1); history = []; renderHistory(); renderTeams(); changed(); });
 
   // ---------- presets ----------
-  PRESETS.forEach((p) => {
+  PRESETS.forEach((p, pi) => {
     const b = document.createElement("button"); b.className = "preset"; b.type = "button";
     const dots = document.createElement("span"); dots.className = "dots"; p.items.slice(0, 6).forEach((_, i) => { const d = document.createElement("i"); d.style.background = PALETTE[i % PALETTE.length]; dots.appendChild(d); });
     const strong = document.createElement("strong"); strong.textContent = p.name; const small = document.createElement("small"); small.textContent = p.sub;
     b.append(dots, strong, small);
-    b.addEventListener("click", () => { state.mode = "wheel"; state.title = p.name; el.title.value = p.name; state.items = p.items.map((t, i) => ({ t, c: i % PALETTE.length, w: 1 })); history = []; renderHistory(); renderItems(); changed(); setTab("options"); toast(p.name + " loaded"); });
-    el.presets.appendChild(b);
+    b.addEventListener("click", () => { state.mode = "wheel"; state.title = p.name; el.title.value = p.name; state.items = p.items.map((t, i) => ({ t, c: i % PALETTE.length, w: 1 })); cascadeItems = true; history = []; renderHistory(); renderItems(); changed(); setTab("options"); toast(p.name + " loaded"); });
+    b.style.setProperty("--i", pi); el.presets.appendChild(b);
   });
 
   // ---------- share ----------
@@ -575,8 +603,8 @@
   function renderSaved() {
     const list = loadJSON(LS.saved, []);
     el.savedList.innerHTML = ""; el.savedEmpty.hidden = list.length > 0;
-    list.forEach((s) => {
-      const li = document.createElement("li");
+    list.forEach((s, si) => {
+      const li = document.createElement("li"); li.style.setProperty("--i", Math.min(si, 10));
       const name = document.createElement("div"); name.className = "name"; name.textContent = s.name;
       const meta = document.createElement("span"); meta.className = "meta"; meta.textContent = (s.data.items || []).length + " options · " + new Date(s.at).toLocaleDateString(); name.appendChild(meta);
       const load = document.createElement("button"); load.className = "btn btn-small"; load.textContent = "Load"; load.type = "button";
@@ -660,7 +688,7 @@
     document.querySelectorAll(".pane").forEach((p) => { const on = p.id === "pane-" + name; p.hidden = !on; p.classList.remove("is-active"); if (on) { void p.offsetWidth; p.classList.add("is-active"); } });
     if (typeof placeGlider === "function") placeGlider(true);
     if (name === "share") renderShare(); if (name === "saved") renderSaved();
-    if (name === "teams") { renderTeams(); setMode("teams"); } if (name === "options") setMode("wheel");
+    if (name === "teams") { teamsAppear = "all"; renderTeams(); setMode("teams"); } if (name === "options") setMode("wheel");
   }
   document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => setTab(t.dataset.tab)));
   // the tab line is liquid: it stretches across both tabs, then shrinks onto the new one
@@ -694,10 +722,11 @@
       mode: s.mode === "teams" ? "teams" : "wheel", teams: { names: g.names.slice(0, 200), count: clampInt(g.count, 2, 8, 2), labels: (g.labels || []).slice(0, 8), assigned: g.names.map((_, i) => clampInt((g.assigned || [])[i], -1, 7, -1)), all: !!g.all } };
     if (state.items.length === 0) state.items = [{ t: "", c: 0, w: 1 }, { t: "", c: 1, w: 1 }];
     el.title.value = state.title; el.soundSel.value = state.sound; el.removeSel.checked = state.remove; el.hiddenSel.checked = state.hidden;
-    lastIdx = -1; renderItems(); renderTeams(); changed();
+    lastIdx = -1; cascadeItems = true; renderItems(); teamsAppear = "all"; renderTeams(); changed();
     if (state.mode === "teams" && activeTab === "options") setTab("teams");
   }
   function boot() {
+    setTimeout(() => document.body.classList.add("ready"), 1400);
     applyTheme(); el.themeSel.value = prefs.theme; el.muteBtn.setAttribute("aria-pressed", String(!!prefs.muted));
     const m = location.hash.match(/#w=([A-Za-z0-9\-_]+)/);
     const fromLink = m && decodeState(m[1]);
@@ -712,5 +741,5 @@
   boot();
 
   // a tiny hook for tests
-  window.__spin = { get state() { return state; }, spin, encodeState, decodeState, get angle() { return angle; }, slices, indexAt, get spinning() { return spinning || !!windup; } };
+  window.__spin = { get state() { return state; }, spin, encodeState, decodeState, get angle() { return angle; }, slices, indexAt, get spinning() { return spinning || !!windup; }, shown() { return [...lay.cur.values()]; } };
 })();

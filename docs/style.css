@@ -131,16 +131,38 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;back
 
 /* ---- entrance: the stage, then the panel, rise in once ---- */
 @keyframes rise-in{from{opacity:0;transform:translateY(calc(14px * var(--moving)))}}
-.stage{animation:rise-in var(--dur-4) var(--ease-out) backwards}
-.panel{animation:rise-in var(--dur-4) var(--ease-out) 90ms backwards}
-.bar{animation:rise-in var(--dur-3) var(--ease-out) backwards}
+/* appearing: the page assembles itself, piece after piece */
+.bar{animation:bar-in var(--dur-4) var(--ease-out) backwards}
+@keyframes bar-in{from{opacity:0;transform:translateY(calc(-16px * var(--moving)))}}
+.brand-mark{animation:mark-in 900ms var(--spring-soft) 120ms backwards}
+@keyframes mark-in{from{opacity:0;transform:rotate(calc(-270deg * var(--moving))) scale(calc(1 - .5 * var(--moving)))}}
+.brand-word{animation:rise-in var(--dur-4) var(--ease-out) 220ms backwards}
+.bar-actions .icon-btn{animation:blob-in var(--t-spring) var(--spring) 280ms backwards}
+.bar-actions .icon-btn:nth-child(2){animation-delay:340ms}
+.bar-actions .icon-btn:nth-child(3){animation-delay:400ms}
+.stage-row .btn{animation:blob-in var(--t-spring) var(--spring) 420ms backwards}
+.stage-row .btn + .btn{animation-delay:490ms}
+.panel{animation:rise-in var(--t-spring) var(--spring-soft) 180ms backwards}
+.history{animation:drip-in var(--t-spring) var(--spring-soft) backwards;transform-origin:50% 0}
+.foot{animation:fade var(--dur-4) var(--ease) 800ms backwards}
+body:not(.ready) .hub{animation:hub-in var(--t-spring) var(--spring) 460ms backwards}
+@keyframes hub-in{from{opacity:0;transform:translate(-50%,-50%) scale(calc(1 - .6 * var(--moving)))}}
+/* rows, cards and names that show up later pop in as blobs, one after the other */
+.item.appear,.team.appear{animation:blob-in var(--t-spring) var(--spring) backwards;transform-origin:0 50%}
+.pane.is-active .preset{animation:blob-in var(--t-spring) var(--spring) calc(60ms + var(--i,0) * 35ms) backwards}
+.pane.is-active .saved li{animation:blob-in var(--t-spring) var(--spring) calc(40ms + var(--i,0) * 40ms) backwards;transform-origin:0 50%}
+/* the QR code develops like a photo */
+.pane.is-active #qr{animation:develop 700ms var(--ease-out) 140ms backwards}
+@keyframes develop{from{opacity:0;filter:blur(8px);transform:scale(calc(1 - .1 * var(--moving)))}}
+body.big .wheel-wrap{animation:big-in var(--t-spring) var(--spring-soft)}
+@keyframes big-in{from{opacity:.4;transform:scale(calc(1 - .18 * var(--moving)))}}
 
 /* ---- stage ---- */
 .stage{display:flex;flex-direction:column;align-items:center;gap:14px;min-width:0}
 .title{
   width:min(100%,420px); text-align:center; border:0;
   background:linear-gradient(90deg,var(--coral),var(--mango)) center bottom/0% 3px no-repeat, linear-gradient(var(--field-line),var(--field-line)) center bottom/34% 3px no-repeat;
-  transition:background-size var(--t-spring) var(--spring); animation:line-grow var(--dur-4) var(--ease-out) 200ms backwards;
+  transition:background-size var(--t-spring) var(--spring); animation:line-grow var(--dur-4) var(--ease-out) 460ms backwards, rise-in var(--dur-4) var(--ease-out) 140ms backwards;
   font-family:"Unbounded",sans-serif; font-weight:500; font-size:clamp(18px,3vw,24px); padding:6px 10px; color:var(--ink); border-radius:0;
 }
 .title::placeholder{color:var(--ink-faint)}
@@ -166,7 +188,7 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;back
 @keyframes hubspin{from{box-shadow:0 10px 30px rgba(42,24,56,.35), inset 0 1px 0 rgba(255,255,255,.25)}50%{box-shadow:0 10px 40px rgba(255,107,107,.55), inset 0 1px 0 rgba(255,255,255,.25)}to{box-shadow:0 10px 30px rgba(42,24,56,.35), inset 0 1px 0 rgba(255,255,255,.25)}}
 @media (prefers-reduced-motion: reduce){.hub[aria-busy="true"]{animation:none}}
 .stage-row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
-.hint{margin:0;color:var(--ink-dim)}
+.hint{margin:0;color:var(--ink-dim);animation:rise-in var(--dur-4) var(--ease-out) backwards}
 .hint[hidden]{display:none}
 
 .history[hidden]{display:none}
