@@ -86,14 +86,21 @@ async def main():
         check("preset cards blob in", an == "blob-in", an)
         await pa.locator(".preset").nth(2).click(); await pa.wait_for_timeout(30)
         ap = await pa.locator(".item.appear").count(); check("loaded options cascade in", ap == 6, ap)
-        # liquid glass look (the default while it is being tested)
+        # a fresh visit gets the classic look; liquid glass is experimental and has to be switched on
+        pf = await b.new_page(viewport={"width": 1280, "height": 860}); await pf.goto(URL); await pf.wait_for_timeout(800)
+        fresh = await pf.evaluate("[document.documentElement.dataset.look || '', document.getElementById('lookSel').value, document.querySelector('.hub').style.backdropFilter]")
+        check("classic is the look on a fresh visit", fresh == ["", "classic", ""], fresh)
+        await pf.close()
         pgl = await b.new_page(viewport={"width": 1280, "height": 860}); pgl.on("pageerror", lambda e: errors.append(str(e)))
-        await pgl.goto(URL); await pgl.wait_for_timeout(1800)
+        await pgl.goto(URL); await pgl.wait_for_timeout(1000)
+        await pgl.click('[data-tab="settings"]'); await pgl.wait_for_timeout(600)
+        await pgl.select_option("#lookSel", "glass"); await pgl.wait_for_timeout(300)
+        await pgl.click('[data-tab="options"]'); await pgl.wait_for_timeout(900)
         g = await pgl.evaluate("""(() => { const t=document.querySelector('.tab.is-active'), gl=document.querySelector('.tab-glider'), tabs=document.querySelector('.tabs');
           return { look: document.documentElement.dataset.look, lens: document.querySelector('.hub').style.backdropFilter.startsWith('url('), filters: document.querySelectorAll('filter[id^=lens]').length,
                    pill: Math.abs(parseFloat(gl.style.left) - t.offsetLeft) < 1 && Math.abs(parseFloat(gl.style.width) - t.offsetWidth) < 1, pillH: gl.getBoundingClientRect().height,
                    fits: tabs.scrollWidth <= tabs.clientWidth + 1, barR: getComputedStyle(document.querySelector('.bar')).borderTopLeftRadius }; })()""")
-        check("glass is the look on a fresh visit", g["look"] == "glass", g["look"])
+        check("glass switches on from Settings", g["look"] == "glass", g["look"])
         check("hub and panes refract (lens filters attached)", g["lens"] and g["filters"] >= 5, [g["lens"], g["filters"]])
         check("tab thumb is a full glass pill under its tab", g["pill"] and g["pillH"] > 25, [g["pill"], g["pillH"]])
         check("all six tabs fit in the capsule", g["fits"])

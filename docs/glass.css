@@ -1,4 +1,4 @@
-/* Liquid glass look (a test, switchable in Settings): clear glass that bends what is behind it,
+/* Liquid glass look (experimental, switched on in Settings; classic is the default): clear glass that bends what is behind it,
    floating capsules, concentric corners, rim light, and a highlight that follows the pointer.
    Nothing decorative sits behind it: the wheel is what the glass bends.
    Everything here is scoped to :root[data-look="glass"]; without it the classic look is untouched. */

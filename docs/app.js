@@ -634,7 +634,7 @@
   function isDark() { const t = document.documentElement.getAttribute("data-theme"); return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; }
   function applyTheme() { if (prefs.theme === "system") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", prefs.theme); }
 
-  // ---------- looks: classic, or liquid glass (a test) ----------
+  // ---------- looks: classic (default), or liquid glass (experimental) ----------
   // In Chromium the glass really bends what is behind it: each pane gets an SVG displacement map of its own size
   // (red = sideways, blue = up and down, grey in the middle = no bending), so only the rim refracts, like a lens.
   const root = document.documentElement;
@@ -672,7 +672,7 @@
     el.style.backdropFilter = "url(#lens-" + i + ") blur(" + cfg.blur + "px) saturate(" + cfg.sat + ") brightness(1.05)";
   }
   function applyLook() {
-    const glass = prefs.look !== "classic";
+    const glass = prefs.look === "glass";   // classic is the default; glass is an experiment you switch on
     if (glass) root.setAttribute("data-look", "glass"); else root.removeAttribute("data-look");
     el.lookSel.value = glass ? "glass" : "classic";
     if (lensRO) { lensRO.disconnect(); lensRO = null; }
