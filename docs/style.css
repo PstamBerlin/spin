@@ -25,9 +25,9 @@
 }
 @supports (transition-timing-function: linear(0, 1)){
   :root{
-    --spring:linear(0,0.143,0.457,0.793,1.052,1.197,1.233,1.194,1.118,1.041,0.983,0.952,0.946,0.956,0.974,0.992,1.005,1.012,1.013,1.01,1.006,1.001,0.999,0.997,0.997,0.998,0.999,1,1);
-    --spring-soft:linear(0,0.067,0.223,0.414,0.603,0.767,0.896,0.988,1.045,1.075,1.084,1.079,1.066,1.05,1.034,1.02,1.009,1.001,0.996,0.994,0.993,0.993,0.994,0.996,0.997,0.998,0.999,1,1);
-    --t-spring:640ms;
+    --spring:linear(0,0.082,0.27,0.495,0.708,0.883,1.007,1.082,1.115,1.118,1.102,1.077,1.05,1.026,1.007,0.995,0.988,0.986,0.986,0.989,0.992,0.995,0.998,1,1.001,1.002,1.002,1.002,1);
+    --spring-soft:linear(0,0.045,0.151,0.285,0.427,0.56,0.678,0.776,0.855,0.915,0.958,0.988,1.008,1.019,1.024,1.025,1.024,1.021,1.018,1.014,1.011,1.008,1.005,1.003,1.002,1.001,1,1,1);
+    --t-spring:540ms;
   }
 }
 @media (prefers-reduced-motion: reduce){:root{--moving:0}}
@@ -109,9 +109,9 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;back
 .icon-btn{transform:translate(var(--mx,0px),var(--my,0px));transition:background var(--dur-1) var(--ease),transform var(--t-spring) var(--spring)}
 .icon-btn.pulling{transition:background var(--dur-1) var(--ease),transform 90ms var(--ease-out)}
 .icon-btn:hover{background:var(--chip)}
-.icon-btn:active{transform:translate(var(--mx,0px),var(--my,0px)) scale(calc(1 + .1 * var(--moving)),calc(1 - .14 * var(--moving)));transition-duration:70ms}
+.icon-btn:active{transform:translate(var(--mx,0px),var(--my,0px)) scale(calc(1 + .06 * var(--moving)),calc(1 - .08 * var(--moving)));transition-duration:70ms}
 .icon-btn.popped .ico{animation:ico-pop var(--t-spring) var(--spring)}
-@keyframes ico-pop{from{transform:scale(calc(1 - .5 * var(--moving)),calc(1 - .2 * var(--moving))) rotate(calc(-20deg * var(--moving)))}}
+@keyframes ico-pop{from{transform:scale(calc(1 - .3 * var(--moving)),calc(1 - .15 * var(--moving))) rotate(calc(-12deg * var(--moving)))}}
 .icon-btn[aria-pressed="true"]{background:var(--chip);border-color:var(--frost-line)}
 .ico{width:22px;height:22px;fill:currentColor}
 .ico .stroke{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
@@ -159,8 +159,8 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;back
   transition:transform var(--t-spring) var(--spring);
 }
 .hub.pulling{transition:transform 90ms var(--ease-out)}
-.hub:hover{transform:translate(calc(-50% + var(--mx,0px)),calc(-50% + var(--my,0px))) scale(calc(1 + .06 * var(--moving)))}
-.hub:active{transform:translate(calc(-50% + var(--mx,0px)),calc(-50% + var(--my,0px))) scale(calc(1 + .08 * var(--moving)),calc(1 - .1 * var(--moving)));transition-duration:70ms}
+.hub:hover{transform:translate(calc(-50% + var(--mx,0px)),calc(-50% + var(--my,0px))) scale(calc(1 + .04 * var(--moving)))}
+.hub:active{transform:translate(calc(-50% + var(--mx,0px)),calc(-50% + var(--my,0px))) scale(calc(1 + .05 * var(--moving)),calc(1 - .06 * var(--moving)));transition-duration:70ms}
 .hub:disabled{opacity:.75;cursor:not-allowed}
 .hub[aria-busy="true"]{animation:hubspin 1.2s linear infinite}
 @keyframes hubspin{from{box-shadow:0 10px 30px rgba(42,24,56,.35), inset 0 1px 0 rgba(255,255,255,.25)}50%{box-shadow:0 10px 40px rgba(255,107,107,.55), inset 0 1px 0 rgba(255,255,255,.25)}to{box-shadow:0 10px 30px rgba(42,24,56,.35), inset 0 1px 0 rgba(255,255,255,.25)}}
@@ -191,7 +191,7 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;back
 .btn.pulling{transition:transform 90ms var(--ease-out), box-shadow var(--dur-2) var(--ease), background var(--dur-1) var(--ease)}
 .btn:hover{transform:translate(var(--mx,0px),calc(var(--my,0px) - 2px * var(--moving)))}
 /* jelly: wider and flatter while pressed, springs back on release */
-.btn:active{transform:translate(var(--mx,0px),var(--my,0px)) scale(calc(1 + .06 * var(--moving)),calc(1 - .1 * var(--moving)));transition-duration:70ms}
+.btn:active{transform:translate(var(--mx,0px),var(--my,0px)) scale(calc(1 + .035 * var(--moving)),calc(1 - .06 * var(--moving)));transition-duration:70ms}
 .btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
 .btn-primary{
   background:linear-gradient(135deg,var(--coral),var(--mango)); color:var(--plum); padding:14px 34px; font-size:18px;
@@ -221,13 +221,13 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;back
 .tab-glider.settle{transition:left var(--t-spring) var(--spring),width var(--t-spring) var(--spring),height var(--dur-3) var(--ease-out)}
 .pane[hidden]{display:none}
 /* a pane's rows drip in one after the other, a little stretched, and settle */
-@keyframes drip-in{from{opacity:0;transform:translateY(calc(-12px * var(--moving))) scaleY(calc(1 + .14 * var(--moving)))}}
+@keyframes drip-in{from{opacity:0;transform:translateY(calc(-8px * var(--moving))) scaleY(calc(1 + .06 * var(--moving)))}}
 .pane.is-active > *{animation:drip-in var(--t-spring) var(--spring-soft) backwards;transform-origin:50% 0}
-.pane.is-active > :nth-child(2){animation-delay:45ms}
-.pane.is-active > :nth-child(3){animation-delay:90ms}
-.pane.is-active > :nth-child(4){animation-delay:135ms}
-.pane.is-active > :nth-child(5){animation-delay:180ms}
-.pane.is-active > :nth-child(n+6){animation-delay:225ms}
+.pane.is-active > :nth-child(2){animation-delay:30ms}
+.pane.is-active > :nth-child(3){animation-delay:60ms}
+.pane.is-active > :nth-child(4){animation-delay:90ms}
+.pane.is-active > :nth-child(5){animation-delay:120ms}
+.pane.is-active > :nth-child(n+6){animation-delay:150ms}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
 .row.center{justify-content:center}
 .muted{color:var(--ink-dim);font-size:14px;margin:8px 0 0}
@@ -237,7 +237,7 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;back
 .items{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;max-height:min(46dvh,520px);overflow:auto;padding-right:2px}
 .item{display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:center}
 /* a blob: starts small and squashed, overshoots, settles */
-@keyframes blob-in{from{opacity:0;transform:scale(calc(1 - .45 * var(--moving)),calc(1 - .7 * var(--moving)))}}
+@keyframes blob-in{from{opacity:0;transform:scale(calc(1 - .3 * var(--moving)),calc(1 - .45 * var(--moving)))}}
 .item.fresh{animation:blob-in var(--t-spring) var(--spring);transform-origin:0 50%}
 /* a row that leaves shrinks to a line and is gone */
 .item.leaving{animation:shrink-out var(--dur-2) var(--ease) forwards;pointer-events:none;transform-origin:0 50%}
@@ -248,7 +248,7 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;back
 }
 .swatch{transition:transform var(--t-spring) var(--spring)}
 .swatch:hover{transform:translateY(calc(-2px * var(--moving))) scale(calc(1 + .08 * var(--moving)))}
-.swatch:active{transform:scale(calc(1 + .12 * var(--moving)),calc(1 - .16 * var(--moving)));transition-duration:70ms}
+.swatch:active{transform:scale(calc(1 + .07 * var(--moving)),calc(1 - .09 * var(--moving)));transition-duration:70ms}
 .item input[type="text"]{
   width:100%;min-width:0;border:1px solid var(--field-line);border-radius:12px;padding:9px 12px;font-weight:700;
   background:linear-gradient(90deg,var(--sky),var(--lilac)) center bottom/0% 2px no-repeat, var(--field);
@@ -278,7 +278,7 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;back
   transition:left var(--t-spring) var(--spring)}
 .seg.is-all::before{left:calc(50% + 3px)}
 .seg.squish::before{animation:thumb-squish 380ms var(--ease-out)}
-@keyframes thumb-squish{35%{transform:scale(calc(1 + .16 * var(--moving)),calc(1 - .14 * var(--moving)))}}
+@keyframes thumb-squish{35%{transform:scale(calc(1 + .09 * var(--moving)),calc(1 - .08 * var(--moving)))}}
 .seg-btn{border:1px solid transparent;border-radius:12px;background:transparent;padding:9px 10px;font-weight:800;font-size:14px;color:var(--ink-dim);display:flex;flex-direction:column;align-items:center;gap:2px;line-height:1.2}
 .seg-btn small{font-weight:500;font-size:12px;color:var(--ink-faint)}
 .seg-btn{transition:background var(--dur-2) var(--ease),color var(--dur-2) var(--ease),transform var(--dur-1) var(--ease)}
@@ -360,11 +360,11 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;back
 /* the handle: a short line that stretches while you pull the card */
 .winner::before{content:"";position:absolute;top:10px;left:50%;width:calc(40px + var(--pull,0) * 60px);height:4px;margin-left:calc(-20px - var(--pull,0) * 30px);border-radius:999px;background:var(--ink-faint);opacity:.55;transition:width var(--t-spring) var(--spring),margin-left var(--t-spring) var(--spring)}
 .winner.is-pulled::before{transition:none}
-@keyframes pop{from{transform:scale(calc(1 - .35 * var(--moving)),calc(1 - .5 * var(--moving)));opacity:0}}
-@keyframes pull-up{from{opacity:0;transform:translateY(calc(22px * var(--moving))) scaleY(calc(1 + .25 * var(--moving)))}}
-.winner-text{animation:pull-up var(--t-spring) var(--spring) 90ms backwards;transform-origin:50% 100%}
-.winner-sub{animation:pull-up var(--t-spring) var(--spring-soft) 170ms backwards}
-.winner .row{animation:pull-up var(--t-spring) var(--spring-soft) 230ms backwards}
+@keyframes pop{from{transform:scale(calc(1 - .2 * var(--moving)),calc(1 - .3 * var(--moving)));opacity:0}}
+@keyframes pull-up{from{opacity:0;transform:translateY(calc(14px * var(--moving))) scaleY(calc(1 + .12 * var(--moving)))}}
+.winner-text{animation:pull-up var(--t-spring) var(--spring) 60ms backwards;transform-origin:50% 100%}
+.winner-sub{animation:pull-up var(--t-spring) var(--spring-soft) 110ms backwards}
+.winner .row{animation:pull-up var(--t-spring) var(--spring-soft) 150ms backwards}
 .winner-kicker{margin:0;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-dim);font-weight:800}
 .winner-text{
   margin:8px 0 4px;font-family:"Unbounded",sans-serif;font-weight:800;font-size:clamp(28px,7vw,56px);line-height:1.05;letter-spacing:-.02em;overflow-wrap:anywhere;color:var(--plum);
@@ -378,7 +378,7 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;back
   background:var(--plum);color:#FFF4E6;padding:10px 18px;border-radius:999px;font-weight:700;box-shadow:0 10px 30px rgba(0,0,0,.3);animation:notice-in var(--t-spring) var(--spring);
 }
 .toast[hidden]{display:none}
-@keyframes notice-in{from{opacity:0;transform:translate(-50%,calc(18px * var(--moving))) scale(calc(1 - .35 * var(--moving)),calc(1 + .2 * var(--moving)))}}
+@keyframes notice-in{from{opacity:0;transform:translate(-50%,calc(14px * var(--moving))) scale(calc(1 - .2 * var(--moving)),calc(1 + .1 * var(--moving)))}}
 
 .foot{text-align:center;font-size:12.5px;color:var(--ink-faint);padding:6px 16px calc(14px + env(safe-area-inset-bottom))}
 .foot a{color:inherit}

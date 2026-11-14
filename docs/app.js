@@ -619,7 +619,7 @@
   // pull: the big buttons lean toward the pointer and spring back when it leaves
   if (!reduceMotion && matchMedia("(hover: hover) and (pointer: fine)").matches) {
     document.querySelectorAll(".btn-primary, .hub, .icon-btn").forEach((b) => {
-      const k = b.classList.contains("hub") ? 0.16 : b.classList.contains("icon-btn") ? 0.3 : 0.22;
+      const k = b.classList.contains("hub") ? 0.1 : b.classList.contains("icon-btn") ? 0.2 : 0.15;
       b.addEventListener("pointermove", (e) => {
         if (b.disabled) return;
         const r = b.getBoundingClientRect();
@@ -676,7 +676,7 @@
     } else {
       const uL = Math.min(curL, L), uR = Math.max(curL + curW, L + W);
       glider.className = "tab-glider stretch"; glider.style.left = uL + "px"; glider.style.width = (uR - uL) + "px";
-      gliderT = setTimeout(() => { glider.className = "tab-glider settle"; glider.style.left = L + "px"; glider.style.width = W + "px"; }, 150);
+      gliderT = setTimeout(() => { glider.className = "tab-glider settle"; glider.style.left = L + "px"; glider.style.width = W + "px"; }, 120);
     }
     t.scrollIntoView({ block: "nearest", inline: "nearest", behavior: animate && !reduceMotion ? "smooth" : "auto" });
   }
