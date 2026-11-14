@@ -23,7 +23,7 @@
     againBtn: $("againBtn"), removeAgainBtn: $("removeAgainBtn"), closeBtn: $("closeBtn"),
     history: $("history"), historyChips: $("historyChips"), historyClear: $("historyClear"), emptyHint: $("emptyHint"), toast: $("toast"),
     teamNames: $("teamNames"), teamsMinus: $("teamsMinus"), teamsPlus: $("teamsPlus"), teamsCount: $("teamsCount"), teamsNext: $("teamsNext"),
-    teamList: $("teamList"), splitAll: $("splitAll"), teamsShuffle: $("teamsShuffle"), teamsReset: $("teamsReset"),
+    teamList: $("teamList"), modeOne: $("modeOne"), modeAll: $("modeAll"), teamsShuffle: $("teamsShuffle"), teamsReset: $("teamsReset"),
   };
 
   // ---------- state ----------
@@ -42,7 +42,8 @@
   function fresh() {
     return { title: "", items: PRESETS[4].items.map((t, i) => ({ t, c: i % PALETTE.length, w: 1 })), hidden: false, remove: false, sound: "classic", mode: "wheel", teams: freshTeams() };
   }
-  function freshTeams() { return { names: [], count: 2, labels: [], assigned: [] }; }
+  function freshTeams() { return { names: [], count: 2, labels: [], assigned: [], all: false }; }
+  let popFrom = -1;   // names placed in a cascade get a pop animation
   const TEAM_WORDS = ["Red", "Orange", "Yellow", "Mint", "Blue", "Violet", "Pink", "Green"];
   function teamLabel(i) { return (state.teams.labels[i] || "").trim() || "Team " + TEAM_WORDS[i % TEAM_WORDS.length]; }
   function teamSizes() { const z = new Array(state.teams.count).fill(0); state.teams.assigned.forEach((t) => { if (t >= 0 && t < z.length) z[t]++; }); return z; }
@@ -61,7 +62,7 @@
   function encodeState(s) {
     const compact = { t: s.title || "", i: s.items.map((it) => [it.t, it.c, it.w]), h: s.hidden ? 1 : 0, r: s.remove ? 1 : 0, s: s.sound };
     if (s.mode === "teams") compact.m = "t";
-    if (s.teams && s.teams.names.length) compact.g = { n: s.teams.names, c: s.teams.count, l: s.teams.labels, a: s.teams.assigned };
+    if (s.teams && s.teams.names.length) compact.g = { n: s.teams.names, c: s.teams.count, l: s.teams.labels, a: s.teams.assigned, x: s.teams.all ? 1 : 0 };
     const json = JSON.stringify(compact);
     const bytes = new TextEncoder().encode(json);
     let bin = ""; bytes.forEach((b) => (bin += String.fromCharCode(b)));
@@ -85,6 +86,7 @@
         teams.count = clampInt(c.g.c, 2, 8, 2);
         teams.labels = Array.isArray(c.g.l) ? c.g.l.slice(0, 8).map((x) => String(x || "").slice(0, 24)) : [];
         teams.assigned = teams.names.map((_, i) => clampInt(Array.isArray(c.g.a) ? c.g.a[i] : -1, -1, teams.count - 1, -1));
+        teams.all = !!c.g.x;
       }
       return { title: String(c.t || "").slice(0, 48), items, hidden: !!c.h, remove: !!c.r, sound: ["classic", "drums", "chime"].includes(c.s) ? c.s : "classic", mode: c.m === "t" ? "teams" : "wheel", teams };
     } catch (e) { return null; }
@@ -343,12 +345,22 @@
     if (state.mode === "teams") {
       const ni = nextNameIndex(); const name = state.teams.names[ni];
       state.teams.assigned[ni] = win.team;
-      el.winnerText.textContent = name;
-      const left = state.teams.assigned.filter((t) => t < 0).length;
-      el.winnerSub.textContent = "joins " + teamLabel(win.team) + (left ? " · " + left + " to go" : " · everyone is placed");
-      el.againBtn.textContent = left ? "Next name" : "Show the teams"; el.removeAgainBtn.hidden = true;
+      pushHistory({ t: name + ": " + teamLabel(win.team), c: win.c });
+      if (state.teams.all) {
+        // one spin places everyone: the landed name goes to the landed team, the rest fill up the teams in balance
+        popFrom = 0; placeRest();
+        el.winnerText.textContent = "Teams ready";
+        el.winnerSub.textContent = name + " starts " + teamLabel(win.team) + ", everyone else found a team";
+        el.againBtn.textContent = "Show the teams";
+      } else {
+        el.winnerText.textContent = name;
+        const left = state.teams.assigned.filter((t) => t < 0).length;
+        el.winnerSub.textContent = "joins " + teamLabel(win.team) + (left ? " · " + left + " to go" : " · everyone is placed");
+        el.againBtn.textContent = left ? "Next name" : "Show the teams";
+      }
+      el.removeAgainBtn.hidden = true;
       el.overlay.hidden = false; el.againBtn.focus();
-      pushHistory({ t: name + ": " + teamLabel(win.team), c: win.c }); playWin(); confetti(col);
+      playWin(); confetti(col);
       renderTeams(); changed();
       return;
     }
@@ -462,6 +474,7 @@
     const ok = canSpin(); el.spinBtn.disabled = !ok || spinning; el.hub.disabled = !ok || spinning; el.emptyHint.hidden = ok;
     el.emptyHint.textContent = state.mode === "teams" ? (state.teams.names.length < 2 ? "Add at least two names in the Teams tab." : "Everyone is placed. Start over to split again.") : "Add at least two options to spin.";
     el.shuffleBtn.hidden = state.mode === "teams";
+    el.spinBtn.textContent = state.mode === "teams" ? (state.teams.all ? "Spin and place everyone" : "Spin for the next name") : "Spin";
     document.title = (state.title ? state.title + " · " : "") + "Spin";
     if (activeTab === "share") renderShare();
   }
@@ -485,11 +498,22 @@
       const name = document.createElement("input"); name.type = "text"; name.maxLength = 24; name.value = T.labels[i] || ""; name.placeholder = teamLabel(i); name.setAttribute("aria-label", "Name of team " + (i + 1));
       name.addEventListener("input", () => { T.labels[i] = name.value; changed(); });
       const members = document.createElement("div"); members.className = "members";
+      let order = 0;
       T.assigned.forEach((t, k) => { if (t !== i) return; const b = document.createElement("button"); b.type = "button"; b.textContent = T.names[k]; b.title = "Move to the next team";
+        if (popFrom >= 0 && !reduceMotion) { b.classList.add("pop"); b.style.animationDelay = (k * 90) + "ms"; }
         b.addEventListener("click", () => { T.assigned[k] = (t + 1) % T.count; renderTeams(); changed(); }); members.appendChild(b); });
       const size = document.createElement("div"); size.className = "size"; size.textContent = sizes[i] + (sizes[i] === 1 ? " name" : " names");
       li.append(name, members, size); el.teamList.appendChild(li);
     }
+    popFrom = -1;
+    el.modeOne.classList.toggle("is-on", !T.all); el.modeOne.setAttribute("aria-checked", String(!T.all));
+    el.modeAll.classList.toggle("is-on", !!T.all); el.modeAll.setAttribute("aria-checked", String(!!T.all));
+  }
+  function placeRest() {
+    const T = state.teams; const sizes = teamSizes();
+    const open = T.assigned.map((t, i) => (t < 0 ? i : -1)).filter((i) => i >= 0);
+    for (let i = open.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [open[i], open[j]] = [open[j], open[i]]; }
+    for (const k of open) { const cands = []; for (let t = 0; t < T.count; t++) if (teamOpen(t, sizes)) cands.push(t); const t = cands[Math.floor(Math.random() * cands.length)]; T.assigned[k] = t; sizes[t]++; }
   }
   function setNames(lines) {
     const T = state.teams; const old = new Map(T.names.map((n, i) => [n + "#" + i, T.assigned[i]]));
@@ -501,14 +525,8 @@
   el.teamNames.addEventListener("input", () => { clearTimeout(namesTimer); namesTimer = setTimeout(() => { setNames(el.teamNames.value.split(/\r?\n|,|;/).map((x) => x.trim()).filter(Boolean)); renderTeams(); changed(); }, 250); });
   el.teamsMinus.addEventListener("click", () => { const T = state.teams; T.count = Math.max(2, T.count - 1); T.assigned = T.assigned.map((t) => (t >= T.count ? -1 : t)); renderTeams(); changed(); });
   el.teamsPlus.addEventListener("click", () => { state.teams.count = Math.min(8, state.teams.count + 1); renderTeams(); changed(); });
-  el.splitAll.addEventListener("click", () => {
-    const T = state.teams; if (T.names.length < 2) { toast("Add some names first."); return; }
-    let sizes = teamSizes();
-    const open = T.assigned.map((t, i) => (t < 0 ? i : -1)).filter((i) => i >= 0);
-    for (let i = open.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [open[i], open[j]] = [open[j], open[i]]; }
-    for (const k of open) { const cands = []; for (let t = 0; t < T.count; t++) if (teamOpen(t, sizes)) cands.push(t); const t = cands[Math.floor(Math.random() * cands.length)]; T.assigned[k] = t; sizes[t]++; }
-    renderTeams(); changed(); playWin(); confetti(PALETTE[0]); setTimeout(stopConfetti, 2500); toast("Teams made");
-  });
+  el.modeOne.addEventListener("click", () => { state.teams.all = false; renderTeams(); changed(); });
+  el.modeAll.addEventListener("click", () => { state.teams.all = true; renderTeams(); changed(); });
   el.teamsShuffle.addEventListener("click", () => { const T = state.teams; const pairs = T.names.map((n, i) => [n, T.assigned[i]]); for (let i = pairs.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pairs[i], pairs[j]] = [pairs[j], pairs[i]]; } T.names = pairs.map((p) => p[0]); T.assigned = pairs.map((p) => p[1]); renderTeams(); changed(); });
   el.teamsReset.addEventListener("click", () => { state.teams.assigned = state.teams.names.map(() => -1); history = []; renderHistory(); renderTeams(); changed(); });
 
@@ -612,7 +630,7 @@
   function applyState(s) {
     const g = s.teams && Array.isArray(s.teams.names) ? s.teams : freshTeams();
     state = { title: s.title || "", items: (s.items || []).map((it) => ({ t: String(it.t || ""), c: clampInt(it.c, 0, PALETTE.length - 1, 0), w: clampInt(it.w, 1, 9, 1) })), hidden: !!s.hidden, remove: !!s.remove, sound: SOUNDS[s.sound] ? s.sound : "classic",
-      mode: s.mode === "teams" ? "teams" : "wheel", teams: { names: g.names.slice(0, 200), count: clampInt(g.count, 2, 8, 2), labels: (g.labels || []).slice(0, 8), assigned: g.names.map((_, i) => clampInt((g.assigned || [])[i], -1, 7, -1)) } };
+      mode: s.mode === "teams" ? "teams" : "wheel", teams: { names: g.names.slice(0, 200), count: clampInt(g.count, 2, 8, 2), labels: (g.labels || []).slice(0, 8), assigned: g.names.map((_, i) => clampInt((g.assigned || [])[i], -1, 7, -1)), all: !!g.all } };
     if (state.items.length === 0) state.items = [{ t: "", c: 0, w: 1 }, { t: "", c: 1, w: 1 }];
     el.title.value = state.title; el.soundSel.value = state.sound; el.removeSel.checked = state.remove; el.hiddenSel.checked = state.hidden;
     lastIdx = -1; renderItems(); renderTeams(); changed();

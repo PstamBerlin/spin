@@ -108,9 +108,12 @@
         </label>
         <span class="muted" id="teamsNext"></span>
       </div>
+      <div class="seg" role="radiogroup" aria-label="How to place names">
+        <button type="button" class="seg-btn is-on" id="modeOne" role="radio" aria-checked="true">One at a time<small>a spin per name</small></button>
+        <button type="button" class="seg-btn" id="modeAll" role="radio" aria-checked="false">All at once<small>one spin places everyone</small></button>
+      </div>
       <ul class="teamlist" id="teamList"></ul>
       <div class="row">
-        <button class="btn btn-small" id="splitAll">Split all at once</button>
         <button class="btn btn-small btn-ghost" id="teamsShuffle">Shuffle names</button>
         <button class="btn btn-small btn-ghost" id="teamsReset">Start over</button>
       </div>
