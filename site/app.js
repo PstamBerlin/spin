@@ -2,7 +2,7 @@
 (function () {
   "use strict";
 
-  const PALETTE = ["#FF6B6B", "#FFA94D", "#FFE066", "#63E6BE", "#74C0FC", "#B197FC", "#F783AC", "#8CE99A"];
+  const PALETTE = ["#FF3B5C", "#FF8A1F", "#FFD400", "#1DE9A6", "#2E9BFF", "#9B5CFF", "#FF4FB0", "#5CE840"];
   const PLUM = "#2A1838";
   const TAU = Math.PI * 2;
   const POINTER = -Math.PI / 2;          // the pointer sits at the top
@@ -200,7 +200,7 @@
     // glass highlight (frost)
     x.rotate(-angle);
     const g = x.createRadialGradient(-R * 0.4, -R * 0.5, 0, 0, 0, R * 1.1);
-    g.addColorStop(0, "rgba(255,255,255,.28)"); g.addColorStop(0.5, "rgba(255,255,255,.05)"); g.addColorStop(1, "rgba(255,255,255,0)");
+    g.addColorStop(0, "rgba(255,255,255,.2)"); g.addColorStop(0.5, "rgba(255,255,255,.03)"); g.addColorStop(1, "rgba(255,255,255,0)");
     x.beginPath(); x.arc(0, 0, R, 0, TAU); x.fillStyle = g; x.fill();
     x.restore();
     // pointer with flex
