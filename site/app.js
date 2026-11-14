@@ -22,6 +22,8 @@
     overlay: $("overlay"), confetti: $("confetti"), winnerText: $("winnerText"), winnerSub: $("winnerSub"),
     againBtn: $("againBtn"), removeAgainBtn: $("removeAgainBtn"), closeBtn: $("closeBtn"),
     history: $("history"), historyChips: $("historyChips"), historyClear: $("historyClear"), emptyHint: $("emptyHint"), toast: $("toast"),
+    teamNames: $("teamNames"), teamsMinus: $("teamsMinus"), teamsPlus: $("teamsPlus"), teamsCount: $("teamsCount"), teamsNext: $("teamsNext"),
+    teamList: $("teamList"), splitAll: $("splitAll"), teamsShuffle: $("teamsShuffle"), teamsReset: $("teamsReset"),
   };
 
   // ---------- state ----------
@@ -38,8 +40,19 @@
 
   let state = fresh();
   function fresh() {
-    return { title: "", items: PRESETS[4].items.map((t, i) => ({ t, c: i % PALETTE.length, w: 1 })), hidden: false, remove: false, sound: "classic" };
+    return { title: "", items: PRESETS[4].items.map((t, i) => ({ t, c: i % PALETTE.length, w: 1 })), hidden: false, remove: false, sound: "classic", mode: "wheel", teams: freshTeams() };
   }
+  function freshTeams() { return { names: [], count: 2, labels: [], assigned: [] }; }
+  const TEAM_WORDS = ["Red", "Orange", "Yellow", "Mint", "Blue", "Violet", "Pink", "Green"];
+  function teamLabel(i) { return (state.teams.labels[i] || "").trim() || "Team " + TEAM_WORDS[i % TEAM_WORDS.length]; }
+  function teamSizes() { const z = new Array(state.teams.count).fill(0); state.teams.assigned.forEach((t) => { if (t >= 0 && t < z.length) z[t]++; }); return z; }
+  // balanced: a team may take a name while it is below floor, or at floor while fewer than (total mod count) teams went above
+  function teamOpen(i, sizes) {
+    const total = state.teams.names.length, n = state.teams.count, fl = Math.floor(total / n), extra = total % n;
+    const big = sizes.filter((z) => z > fl).length;
+    return sizes[i] < fl || (sizes[i] === fl && big < extra);
+  }
+  function nextNameIndex() { return state.teams.assigned.findIndex((t) => t < 0); }
   let prefs = loadJSON(LS.prefs, { muted: false, theme: "system" });
   let history = [];
   let dirtyUrl = false;
@@ -47,6 +60,8 @@
   // ---------- link encoding ----------
   function encodeState(s) {
     const compact = { t: s.title || "", i: s.items.map((it) => [it.t, it.c, it.w]), h: s.hidden ? 1 : 0, r: s.remove ? 1 : 0, s: s.sound };
+    if (s.mode === "teams") compact.m = "t";
+    if (s.teams && s.teams.names.length) compact.g = { n: s.teams.names, c: s.teams.count, l: s.teams.labels, a: s.teams.assigned };
     const json = JSON.stringify(compact);
     const bytes = new TextEncoder().encode(json);
     let bin = ""; bytes.forEach((b) => (bin += String.fromCharCode(b)));
@@ -64,7 +79,14 @@
         c: clampInt(a[1], 0, PALETTE.length - 1, i % PALETTE.length),
         w: clampInt(a[2], 1, 9, 1),
       }));
-      return { title: String(c.t || "").slice(0, 48), items, hidden: !!c.h, remove: !!c.r, sound: ["classic", "drums", "chime"].includes(c.s) ? c.s : "classic" };
+      const teams = freshTeams();
+      if (c.g && Array.isArray(c.g.n)) {
+        teams.names = c.g.n.slice(0, 200).map((x) => String(x).slice(0, 40));
+        teams.count = clampInt(c.g.c, 2, 8, 2);
+        teams.labels = Array.isArray(c.g.l) ? c.g.l.slice(0, 8).map((x) => String(x || "").slice(0, 24)) : [];
+        teams.assigned = teams.names.map((_, i) => clampInt(Array.isArray(c.g.a) ? c.g.a[i] : -1, -1, teams.count - 1, -1));
+      }
+      return { title: String(c.t || "").slice(0, 48), items, hidden: !!c.h, remove: !!c.r, sound: ["classic", "drums", "chime"].includes(c.s) ? c.s : "classic", mode: c.m === "t" ? "teams" : "wheel", teams };
     } catch (e) { return null; }
   }
   function clampInt(v, lo, hi, dflt) { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : dflt; }
@@ -134,6 +156,13 @@
   const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   function slices() {
+    if (state.mode === "teams") {
+      const sizes = teamSizes(); const open = [];
+      const done = state.teams.names.length > 0 && nextNameIndex() < 0;   // finished: show every team, the wheel just rests
+      for (let i = 0; i < state.teams.count; i++) if (state.teams.names.length && (done || teamOpen(i, sizes))) open.push(i);
+      let a = 0; const span = open.length ? TAU / open.length : 0;
+      return open.map((i) => { const s = { it: { t: teamLabel(i), c: i % PALETTE.length, w: 1, team: i }, start: a, end: a + span, mid: a + span / 2 }; a += span; return s; });
+    }
     const items = state.items.filter((it) => it.t.trim() !== "" || state.items.length <= 1);
     const total = items.reduce((s, it) => s + it.w, 0) || 1;
     let a = 0;
@@ -183,8 +212,8 @@
       // labels always read left to right on screen: slices on the left half are drawn flipped
       const flip = Math.cos(s.mid + angle) < 0;
       x.save(); x.rotate(s.mid + (flip ? Math.PI : 0));
-      const maxW = R * 0.62;
-      const fs = label === "?" ? c * 0.16 : Math.max(10, Math.min(c * 0.11, span * R * 0.42, (maxW * 1.9) / Math.max(3, label.length)));
+      const maxW = R * 0.66;
+      const fs = label === "?" ? c * 0.16 : Math.max(10, Math.min(c * 0.11, span * R * 0.42, (maxW * 1.5) / Math.max(3, label.length)));
       x.font = `800 ${fs}px Manrope, system-ui, sans-serif`; x.textBaseline = "middle"; x.fillStyle = PLUM;
       const txt = fit(x, label, maxW);
       if (flip) { x.textAlign = "left"; x.fillText(txt, -R * 0.9, 0); } else { x.textAlign = "right"; x.fillText(txt, R * 0.9, 0); }
@@ -246,7 +275,7 @@
   }
   function tick() { if (!raf) { lastT = performance.now(); raf = requestAnimationFrame(frame); } }
 
-  function canSpin() { return slices().length >= 2; }
+  function canSpin() { return state.mode === "teams" ? slices().length >= 1 && nextNameIndex() >= 0 : slices().length >= 2; }
   function spin(power) {
     if (!canSpin() || spinning || windup) return;
     audio();
@@ -258,7 +287,7 @@
   }
   function onStop() {
     revealed = true;
-    const sl = slices(); if (sl.length < 2) return;
+    const sl = slices(); if (sl.length < (state.mode === "teams" ? 1 : 2)) return;
     const idx = indexAt(angle, sl); const win = sl[idx].it;
     el.hub.disabled = false; el.spinBtn.disabled = false; el.hub.removeAttribute("aria-busy");
     flex = 1; flexDir = 1;
@@ -310,8 +339,21 @@
   function showWinner(win) {
     lastWinner = win;
     const col = PALETTE[win.c % PALETTE.length];
-    el.winnerText.textContent = win.t.trim() || "(blank)";
     el.winnerText.style.setProperty("--w1", col); el.winnerText.style.setProperty("--w2", PALETTE[(win.c + 1) % PALETTE.length]);
+    if (state.mode === "teams") {
+      const ni = nextNameIndex(); const name = state.teams.names[ni];
+      state.teams.assigned[ni] = win.team;
+      el.winnerText.textContent = name;
+      const left = state.teams.assigned.filter((t) => t < 0).length;
+      el.winnerSub.textContent = "joins " + teamLabel(win.team) + (left ? " · " + left + " to go" : " · everyone is placed");
+      el.againBtn.textContent = left ? "Next name" : "Show the teams"; el.removeAgainBtn.hidden = true;
+      el.overlay.hidden = false; el.againBtn.focus();
+      pushHistory({ t: name + ": " + teamLabel(win.team), c: win.c }); playWin(); confetti(col);
+      renderTeams(); changed();
+      return;
+    }
+    el.againBtn.textContent = "Spin again"; el.removeAgainBtn.hidden = false;
+    el.winnerText.textContent = win.t.trim() || "(blank)";
     el.winnerSub.textContent = state.remove ? "This one leaves the wheel now." : "";
     el.overlay.hidden = false; el.againBtn.focus();
     pushHistory(win); playWin(); confetti(col);
@@ -319,11 +361,11 @@
   }
   function closeWinner() {
     el.overlay.hidden = true; stopConfetti();
-    if (lastWinner) { const sl = slices(); const i = sl.findIndex((s) => s.it === lastWinner); if (i >= 0) { glow = { idx: i, until: performance.now() + 1400 }; tick(); } }
+    if (lastWinner) { const sl = slices(); const i = sl.findIndex((s) => s.it === lastWinner || (lastWinner.team != null && s.it.team === lastWinner.team)); if (i >= 0) { glow = { idx: i, until: performance.now() + 1400 }; tick(); } }
   }
   el.closeBtn.addEventListener("click", closeWinner);
   el.overlay.addEventListener("click", (e) => { if (e.target === el.overlay) closeWinner(); });
-  el.againBtn.addEventListener("click", () => { closeWinner(); spin(); });
+  el.againBtn.addEventListener("click", () => { closeWinner(); if (state.mode === "teams" && nextNameIndex() < 0) { setTab("teams"); return; } spin(); });
   el.removeAgainBtn.addEventListener("click", () => { if (lastWinner && !state.remove) removeItem(lastWinner); closeWinner(); spin(); });
   function removeItem(it) {
     const i = state.items.indexOf(it); if (i >= 0) state.items.splice(i, 1);
@@ -418,9 +460,57 @@
   function changed() {
     lastIdx = -1; revealed = false; glow = null; draw(); syncUrl();
     const ok = canSpin(); el.spinBtn.disabled = !ok || spinning; el.hub.disabled = !ok || spinning; el.emptyHint.hidden = ok;
+    el.emptyHint.textContent = state.mode === "teams" ? (state.teams.names.length < 2 ? "Add at least two names in the Teams tab." : "Everyone is placed. Start over to split again.") : "Add at least two options to spin.";
+    el.shuffleBtn.hidden = state.mode === "teams";
     document.title = (state.title ? state.title + " · " : "") + "Spin";
     if (activeTab === "share") renderShare();
   }
+
+  // ---------- teams ----------
+  function setMode(mode) {
+    if (state.mode === mode) return;
+    state.mode = mode; lastIdx = -1; history = []; renderHistory();
+    changed();
+  }
+  function renderTeams() {
+    const T = state.teams;
+    if (document.activeElement !== el.teamNames) el.teamNames.value = T.names.join("\n");
+    el.teamsCount.textContent = T.count;
+    const ni = nextNameIndex();
+    el.teamsNext.textContent = T.names.length === 0 ? "" : ni < 0 ? "All " + T.names.length + " placed" : "Next up: " + T.names[ni];
+    const sizes = teamSizes();
+    el.teamList.innerHTML = "";
+    for (let i = 0; i < T.count; i++) {
+      const li = document.createElement("li"); li.className = "team" + (T.names.length && ni >= 0 && !teamOpen(i, sizes) ? " is-full" : ""); li.style.setProperty("--tc", PALETTE[i % PALETTE.length]);
+      const name = document.createElement("input"); name.type = "text"; name.maxLength = 24; name.value = T.labels[i] || ""; name.placeholder = teamLabel(i); name.setAttribute("aria-label", "Name of team " + (i + 1));
+      name.addEventListener("input", () => { T.labels[i] = name.value; changed(); });
+      const members = document.createElement("div"); members.className = "members";
+      T.assigned.forEach((t, k) => { if (t !== i) return; const b = document.createElement("button"); b.type = "button"; b.textContent = T.names[k]; b.title = "Move to the next team";
+        b.addEventListener("click", () => { T.assigned[k] = (t + 1) % T.count; renderTeams(); changed(); }); members.appendChild(b); });
+      const size = document.createElement("div"); size.className = "size"; size.textContent = sizes[i] + (sizes[i] === 1 ? " name" : " names");
+      li.append(name, members, size); el.teamList.appendChild(li);
+    }
+  }
+  function setNames(lines) {
+    const T = state.teams; const old = new Map(T.names.map((n, i) => [n + "#" + i, T.assigned[i]]));
+    const seen = {}; T.names = lines.slice(0, 200).map((x) => x.slice(0, 40));
+    T.assigned = T.names.map((n) => { const k = n + "#" + (seen[n] = (seen[n] || 0)); seen[n]++; return old.has(k) ? old.get(k) : -1; });
+    T.assigned = T.assigned.map((t) => (t >= T.count ? -1 : t));
+  }
+  let namesTimer = 0;
+  el.teamNames.addEventListener("input", () => { clearTimeout(namesTimer); namesTimer = setTimeout(() => { setNames(el.teamNames.value.split(/\r?\n|,|;/).map((x) => x.trim()).filter(Boolean)); renderTeams(); changed(); }, 250); });
+  el.teamsMinus.addEventListener("click", () => { const T = state.teams; T.count = Math.max(2, T.count - 1); T.assigned = T.assigned.map((t) => (t >= T.count ? -1 : t)); renderTeams(); changed(); });
+  el.teamsPlus.addEventListener("click", () => { state.teams.count = Math.min(8, state.teams.count + 1); renderTeams(); changed(); });
+  el.splitAll.addEventListener("click", () => {
+    const T = state.teams; if (T.names.length < 2) { toast("Add some names first."); return; }
+    let sizes = teamSizes();
+    const open = T.assigned.map((t, i) => (t < 0 ? i : -1)).filter((i) => i >= 0);
+    for (let i = open.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [open[i], open[j]] = [open[j], open[i]]; }
+    for (const k of open) { const cands = []; for (let t = 0; t < T.count; t++) if (teamOpen(t, sizes)) cands.push(t); const t = cands[Math.floor(Math.random() * cands.length)]; T.assigned[k] = t; sizes[t]++; }
+    renderTeams(); changed(); playWin(); confetti(PALETTE[0]); setTimeout(stopConfetti, 2500); toast("Teams made");
+  });
+  el.teamsShuffle.addEventListener("click", () => { const T = state.teams; const pairs = T.names.map((n, i) => [n, T.assigned[i]]); for (let i = pairs.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pairs[i], pairs[j]] = [pairs[j], pairs[i]]; } T.names = pairs.map((p) => p[0]); T.assigned = pairs.map((p) => p[1]); renderTeams(); changed(); });
+  el.teamsReset.addEventListener("click", () => { state.teams.assigned = state.teams.names.map(() => -1); history = []; renderHistory(); renderTeams(); changed(); });
 
   // ---------- presets ----------
   PRESETS.forEach((p) => {
@@ -428,7 +518,7 @@
     const dots = document.createElement("span"); dots.className = "dots"; p.items.slice(0, 6).forEach((_, i) => { const d = document.createElement("i"); d.style.background = PALETTE[i % PALETTE.length]; dots.appendChild(d); });
     const strong = document.createElement("strong"); strong.textContent = p.name; const small = document.createElement("small"); small.textContent = p.sub;
     b.append(dots, strong, small);
-    b.addEventListener("click", () => { state.title = p.name; el.title.value = p.name; state.items = p.items.map((t, i) => ({ t, c: i % PALETTE.length, w: 1 })); history = []; renderHistory(); renderItems(); changed(); setTab("options"); toast(p.name + " loaded"); });
+    b.addEventListener("click", () => { state.mode = "wheel"; state.title = p.name; el.title.value = p.name; state.items = p.items.map((t, i) => ({ t, c: i % PALETTE.length, w: 1 })); history = []; renderHistory(); renderItems(); changed(); setTab("options"); toast(p.name + " loaded"); });
     el.presets.appendChild(b);
   });
 
@@ -510,6 +600,7 @@
     document.querySelectorAll(".tab").forEach((t) => { const on = t.dataset.tab === name; t.classList.toggle("is-active", on); t.setAttribute("aria-selected", String(on)); });
     document.querySelectorAll(".pane").forEach((p) => { p.hidden = p.id !== "pane-" + name; p.classList.toggle("is-active", !p.hidden); });
     if (name === "share") renderShare(); if (name === "saved") renderSaved();
+    if (name === "teams") { renderTeams(); setMode("teams"); } if (name === "options") setMode("wheel");
   }
   document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => setTab(t.dataset.tab)));
 
@@ -519,10 +610,13 @@
 
   // ---------- apply + boot ----------
   function applyState(s) {
-    state = { title: s.title || "", items: (s.items || []).map((it) => ({ t: String(it.t || ""), c: clampInt(it.c, 0, PALETTE.length - 1, 0), w: clampInt(it.w, 1, 9, 1) })), hidden: !!s.hidden, remove: !!s.remove, sound: SOUNDS[s.sound] ? s.sound : "classic" };
+    const g = s.teams && Array.isArray(s.teams.names) ? s.teams : freshTeams();
+    state = { title: s.title || "", items: (s.items || []).map((it) => ({ t: String(it.t || ""), c: clampInt(it.c, 0, PALETTE.length - 1, 0), w: clampInt(it.w, 1, 9, 1) })), hidden: !!s.hidden, remove: !!s.remove, sound: SOUNDS[s.sound] ? s.sound : "classic",
+      mode: s.mode === "teams" ? "teams" : "wheel", teams: { names: g.names.slice(0, 200), count: clampInt(g.count, 2, 8, 2), labels: (g.labels || []).slice(0, 8), assigned: g.names.map((_, i) => clampInt((g.assigned || [])[i], -1, 7, -1)) } };
     if (state.items.length === 0) state.items = [{ t: "", c: 0, w: 1 }, { t: "", c: 1, w: 1 }];
     el.title.value = state.title; el.soundSel.value = state.sound; el.removeSel.checked = state.remove; el.hiddenSel.checked = state.hidden;
-    lastIdx = -1; renderItems(); changed();
+    lastIdx = -1; renderItems(); renderTeams(); changed();
+    if (state.mode === "teams" && activeTab === "options") setTab("teams");
   }
   function boot() {
     applyTheme(); el.themeSel.value = prefs.theme; el.muteBtn.setAttribute("aria-pressed", String(!!prefs.muted));

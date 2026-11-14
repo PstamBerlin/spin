@@ -76,6 +76,7 @@
   <section class="panel frost" aria-label="Wheel settings">
     <nav class="tabs" role="tablist" aria-label="Panel">
       <button role="tab" class="tab is-active" data-tab="options" aria-selected="true" id="tab-options">Options</button>
+      <button role="tab" class="tab" data-tab="teams" aria-selected="false" id="tab-teams">Teams</button>
       <button role="tab" class="tab" data-tab="presets" aria-selected="false" id="tab-presets">Presets</button>
       <button role="tab" class="tab" data-tab="share" aria-selected="false" id="tab-share">Share</button>
       <button role="tab" class="tab" data-tab="saved" aria-selected="false" id="tab-saved">Saved</button>
@@ -96,6 +97,24 @@
           <span class="muted">Weights: write <code>Pizza ×2</code> or <code>Pizza *2</code>.</span>
         </div>
       </div>
+    </div>
+
+    <div class="pane" id="pane-teams" role="tabpanel" aria-labelledby="tab-teams" hidden>
+      <p class="muted top">Paste the names, choose how many teams, then spin: each spin drops the next name into the team the wheel lands on.</p>
+      <textarea id="teamNames" rows="5" placeholder="One name per line&#10;Alex&#10;Sam&#10;Mia" aria-label="Names, one per line"></textarea>
+      <div class="row between">
+        <label class="count">Teams
+          <span class="weight"><button type="button" id="teamsMinus" aria-label="Fewer teams">−</button><span id="teamsCount" class="plain">2</span><button type="button" id="teamsPlus" aria-label="More teams">+</button></span>
+        </label>
+        <span class="muted" id="teamsNext"></span>
+      </div>
+      <ul class="teamlist" id="teamList"></ul>
+      <div class="row">
+        <button class="btn btn-small" id="splitAll">Split all at once</button>
+        <button class="btn btn-small btn-ghost" id="teamsShuffle">Shuffle names</button>
+        <button class="btn btn-small btn-ghost" id="teamsReset">Start over</button>
+      </div>
+      <p class="muted small">Tap a name in a team to move it to the next team. Teams stay balanced: a full team leaves the wheel until the others catch up.</p>
     </div>
 
     <div class="pane" id="pane-presets" role="tabpanel" aria-labelledby="tab-presets" hidden>

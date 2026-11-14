@@ -94,6 +94,31 @@ async def main():
         await pg.keyboard.press("Escape"); await pg.wait_for_timeout(300)
         check("escape leaves big mode", await pg.locator(".panel").is_visible())
 
+        # teams mode
+        await pg.click('[data-tab="teams"]'); await pg.wait_for_timeout(100)
+        await pg.fill("#teamNames", "Alex\nSam\nMia\nLeo\nZoe\nBen\nKim"); await pg.wait_for_timeout(400)
+        await pg.click("#teamsPlus"); await pg.wait_for_timeout(100)
+        mode = await pg.evaluate("__spin.state.mode"); check("teams mode on", mode == "teams", mode)
+        sl = await pg.evaluate("__spin.slices().length"); check("3 team slices", sl == 3, sl)
+        placed = 0
+        for i in range(7):
+            await pg.click("#spinBtn"); await pg.wait_for_function("window.__spin.spinning === true"); await pg.wait_for_function("window.__spin.spinning === false", timeout=20000); await pg.wait_for_timeout(150)
+            placed = await pg.evaluate("__spin.state.teams.assigned.filter(t=>t>=0).length")
+            await pg.click("#closeBtn"); await pg.wait_for_timeout(50)
+        check("all 7 names placed after 7 spins", placed == 7, placed)
+        sizes = await pg.evaluate("(() => { const z=[0,0,0]; __spin.state.teams.assigned.forEach(t=>z[t]++); return z.sort(); })()")
+        check("teams balanced 2,2,3", sizes == [2,2,3], sizes)
+        check("spin disabled when everyone placed", await pg.locator("#spinBtn").is_disabled())
+        chips = await pg.locator("#teamList .members button").count(); check("7 member chips shown", chips == 7, chips)
+        link = await pg.input_value("#shareUrl"); pg3 = await ctx.new_page(); await pg3.goto(link); await pg3.wait_for_timeout(500)
+        st3 = await pg3.evaluate("JSON.stringify([__spin.state.mode, __spin.state.teams.assigned])"); st1 = await pg.evaluate("JSON.stringify([__spin.state.mode, __spin.state.teams.assigned])")
+        check("teams survive the link", st3 == st1, st3)
+        await pg3.screenshot(path=str(OUT/"10-teams.png")); await pg3.close()
+        await pg.click("#teamsReset"); await pg.click("#splitAll"); await pg.wait_for_timeout(200)
+        placed2 = await pg.evaluate("__spin.state.teams.assigned.filter(t=>t>=0).length"); check("split all places everyone", placed2 == 7, placed2)
+        await pg.click('[data-tab="options"]'); await pg.wait_for_timeout(100)
+        check("options tab returns to wheel mode", await pg.evaluate("__spin.state.mode") == "wheel")
+
         # phone
         pm = await ctx.new_page(); await pm.set_viewport_size({"width": 390, "height": 844}); await pm.goto(URL); await pm.wait_for_timeout(500)
         sw = await pm.evaluate("document.documentElement.scrollWidth"); check("no horizontal overflow on phone", sw <= 390, sw)
