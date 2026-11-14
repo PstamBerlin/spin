@@ -15,7 +15,7 @@
     canvas: $("wheel"), wrap: $("wheelWrap"), hub: $("spinHub"), spinBtn: $("spinBtn"), shuffleBtn: $("shuffleBtn"),
     title: $("titleInput"), items: $("items"), addBtn: $("addBtn"), clearBtn: $("clearBtn"),
     pasteToggle: $("pasteToggle"), pasteBox: $("pasteBox"), pasteArea: $("pasteArea"), pasteApply: $("pasteApply"),
-    presets: $("presets"), shareUrl: $("shareUrl"), copyBtn: $("copyBtn"), nativeShare: $("nativeShare"), qr: $("qr"),
+    presets: $("presets"), shareUrl: $("shareUrl"), copyBtn: $("copyBtn"), nativeShare: $("nativeShare"), qr: $("qr"), qrDownload: $("qrDownload"),
     saveBtn: $("saveBtn"), savedList: $("savedList"), savedEmpty: $("savedEmpty"),
     soundSel: $("soundSel"), removeSel: $("removeSel"), hiddenSel: $("hiddenSel"), themeSel: $("themeSel"), resetBtn: $("resetBtn"),
     muteBtn: $("muteBtn"), themeBtn: $("themeBtn"), bigBtn: $("bigBtn"),
@@ -119,7 +119,7 @@
       win(ctx) { [784, 988, 1175, 1568].forEach((f, i) => { tone(ctx, { f, type: "sine", t: i * 0.12, dur: 1.1, gain: 0.14 }); tone(ctx, { f: f * 2.01, type: "sine", t: i * 0.12, dur: 0.5, gain: 0.04 }); }); },
     },
   };
-  function playTick(speed) { const ctx = audio(); if (ctx) SOUNDS[state.sound].tick(ctx, speed); }
+  function playTick(speed) { const ctx = audio(); if (ctx) SOUNDS[state.sound].tick(ctx, speed); if (navigator.vibrate && !reduceMotion) { try { navigator.vibrate(6); } catch (e) {} } }
   function playWin() { const ctx = audio(); if (ctx) SOUNDS[state.sound].win(ctx); }
 
   // ---------- wheel ----------
@@ -127,6 +127,11 @@
   let angle = 0, vel = 0, spinning = false, lastT = 0, lastIdx = -1, flex = 0, flexDir = 1, size = 0, dpr = 1;
   let drag = null;   // {a0, angle0, samples:[{t,a}]}
   let raf = 0;
+  let revealed = false;                 // hidden-labels mode: labels show only after a spin has stopped
+  let windup = null;                    // {t0, from}: the little kick back before a spin launches
+  let intro = { t0: performance.now(), dur: 700 };   // entrance animation
+  let glow = null;                      // {idx, until}: the winning slice glows after the card closes
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   function slices() {
     const items = state.items.filter((it) => it.t.trim() !== "" || state.items.length <= 1);
@@ -149,21 +154,28 @@
   }
   function draw() {
     const sl = slices(); const n = sl.length;
-    const c = size / 2, R = c - c * 0.06;
+    const c = size / 2;
+    let scale = 1;
+    if (intro) { const k = Math.min(1, (performance.now() - intro.t0) / intro.dur); scale = reduceMotion ? 1 : 0.72 + 0.28 * (1 - Math.pow(1 - k, 3)) * (1 + 0.08 * Math.sin(k * Math.PI)); if (k >= 1) intro = null; }
+    const R = (c - c * 0.06) * scale;
     const x = ctx2d; x.setTransform(dpr, 0, 0, dpr, 0, 0); x.clearRect(0, 0, size, size);
-    // outer glass ring
+    // soft shadow under the wheel
     x.save(); x.translate(c, c);
+    x.beginPath(); x.arc(0, c * 0.03, R + c * 0.045, 0, TAU); x.fillStyle = "rgba(42,24,56,.28)"; x.filter = "blur(" + c * 0.06 + "px)"; x.fill(); x.filter = "none";
+    // outer glass ring
     x.beginPath(); x.arc(0, 0, R + c * 0.045, 0, TAU); x.fillStyle = "rgba(42,24,56,.9)"; x.fill();
     x.beginPath(); x.arc(0, 0, R + c * 0.045, 0, TAU); x.lineWidth = 2; x.strokeStyle = "rgba(255,255,255,.35)"; x.stroke();
     x.rotate(angle);
     if (n === 0) {
       x.beginPath(); x.arc(0, 0, R, 0, TAU); x.fillStyle = "rgba(255,255,255,.15)"; x.fill();
     }
-    const showLabels = !(state.hidden && (spinning || lastIdx === -1 || hideUntilStop));
+    const showLabels = !(state.hidden && !revealed);
+    const glowing = glow && glow.until > performance.now() ? glow : null;
     for (let i = 0; i < n; i++) {
       const s = sl[i];
       x.beginPath(); x.moveTo(0, 0); x.arc(0, 0, R, s.start, s.end); x.closePath();
       x.fillStyle = PALETTE[s.it.c % PALETTE.length]; x.fill();
+      if (glowing && i !== glowing.idx) { x.fillStyle = "rgba(42,24,56,.42)"; x.fill(); }
       x.lineWidth = n > 1 ? Math.max(1.5, c * 0.006) : 0; x.strokeStyle = "rgba(42,24,56,.85)"; if (n > 1) x.stroke();
       // label
       const span = s.end - s.start;
@@ -177,6 +189,11 @@
       const txt = fit(x, label, maxW);
       if (flip) { x.textAlign = "left"; x.fillText(txt, -R * 0.9, 0); } else { x.textAlign = "right"; x.fillText(txt, R * 0.9, 0); }
       x.restore();
+    }
+    if (glowing) {
+      const s = sl[glowing.idx], k = ((glowing.until - performance.now()) / 1400); const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 110);
+      x.beginPath(); x.moveTo(0, 0); x.arc(0, 0, R, s.start, s.end); x.closePath();
+      x.lineWidth = c * 0.02 + pulse * c * 0.01; x.strokeStyle = "rgba(255,255,255," + (0.5 + 0.4 * pulse) * Math.min(1, k * 3) + ")"; x.stroke();
     }
     // pegs at the boundaries
     if (n > 1) for (const s of sl) { x.beginPath(); x.arc(Math.cos(s.start) * (R + c * 0.02), Math.sin(s.start) * (R + c * 0.02), c * 0.012, 0, TAU); x.fillStyle = "rgba(255,255,255,.75)"; x.fill(); }
@@ -200,11 +217,14 @@
     while (lo < hi) { const m = (lo + hi + 1) >> 1; if (x.measureText(text.slice(0, m) + "…").width <= maxW) lo = m; else hi = m - 1; }
     return text.slice(0, Math.max(1, lo)) + "…";
   }
-  let hideUntilStop = false;
 
   function frame(t) {
     const dt = Math.min(0.05, (t - lastT) / 1000 || 0.016); lastT = t;
-    if (spinning) {
+    if (windup) {
+      const k = Math.min(1, (t - windup.t0) / 160);
+      angle = windup.from - 0.22 * Math.sin(k * Math.PI / 2);
+      if (k >= 1) { windup = null; spinning = true; }
+    } else if (spinning) {
       angle += vel * dt;
       // friction: stronger when slow so it settles cleanly
       const decel = 0.55 + 1.2 / (1 + Math.abs(vel));
@@ -221,25 +241,27 @@
     }
     if (flex > 0) flex = Math.max(0, flex - dt * 7);
     draw();
-    if (spinning || drag || flex > 0) raf = requestAnimationFrame(frame); else raf = 0;
+    const busy = spinning || drag || windup || intro || flex > 0 || (glow && glow.until > performance.now());
+    if (busy) raf = requestAnimationFrame(frame); else raf = 0;
   }
   function tick() { if (!raf) { lastT = performance.now(); raf = requestAnimationFrame(frame); } }
 
   function canSpin() { return slices().length >= 2; }
   function spin(power) {
-    if (!canSpin() || spinning) return;
+    if (!canSpin() || spinning || windup) return;
     audio();
-    hideUntilStop = state.hidden;
-    const p = power || 20 + Math.random() * 12;      // rad/s
-    vel = p * (Math.random() < 0.5 && power == null ? 1 : 1);
-    spinning = true; el.hub.disabled = true; el.spinBtn.disabled = true;
+    revealed = false; glow = null;
+    vel = power || 20 + Math.random() * 12;      // rad/s
+    el.hub.disabled = true; el.spinBtn.disabled = true; el.hub.setAttribute("aria-busy", "true");
+    if (reduceMotion) spinning = true; else windup = { t0: performance.now(), from: angle };
     tick();
   }
   function onStop() {
-    hideUntilStop = false;
+    revealed = true;
     const sl = slices(); if (sl.length < 2) return;
     const idx = indexAt(angle, sl); const win = sl[idx].it;
-    el.hub.disabled = false; el.spinBtn.disabled = false;
+    el.hub.disabled = false; el.spinBtn.disabled = false; el.hub.removeAttribute("aria-busy");
+    flex = 1; flexDir = 1;
     // nudge the wheel so the pointer sits clearly inside the slice (never on the line)
     const a = ((POINTER - angle) % TAU + TAU) % TAU; const edge = Math.min(a - sl[idx].start, sl[idx].end - a);
     if (edge < 0.02) angle += (a - sl[idx].start < sl[idx].end - a ? -0.03 : 0.03);
@@ -250,7 +272,7 @@
   // drag to fling
   function pointerAngle(e) { const r = el.canvas.getBoundingClientRect(); return Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2)); }
   el.canvas.addEventListener("pointerdown", (e) => {
-    if (spinning || !canSpin()) return;
+    if (spinning || windup || !canSpin()) return;
     el.canvas.setPointerCapture(e.pointerId); el.canvas.classList.add("is-dragging");
     drag = { a0: pointerAngle(e), angle0: angle, samples: [{ t: performance.now(), a: angle }] };
     audio(); tick();
@@ -269,7 +291,7 @@
       const a = s[0], b = s[s.length - 1]; const dt = (b.t - a.t) / 1000;
       let da = b.a - a.a;
       const v = dt > 0 ? da / dt : 0;
-      if (Math.abs(v) > 2.5) { vel = Math.max(-40, Math.min(40, v)); hideUntilStop = state.hidden; spinning = true; el.hub.disabled = true; el.spinBtn.disabled = true; }
+      if (Math.abs(v) > 2.5) { vel = Math.max(-40, Math.min(40, v)); revealed = false; glow = null; spinning = true; el.hub.disabled = true; el.spinBtn.disabled = true; el.hub.setAttribute("aria-busy", "true"); }
     }
     tick();
   }
@@ -295,7 +317,10 @@
     pushHistory(win); playWin(); confetti(col);
     if (state.remove) { removeItem(win); }
   }
-  function closeWinner() { el.overlay.hidden = true; stopConfetti(); }
+  function closeWinner() {
+    el.overlay.hidden = true; stopConfetti();
+    if (lastWinner) { const sl = slices(); const i = sl.findIndex((s) => s.it === lastWinner); if (i >= 0) { glow = { idx: i, until: performance.now() + 1400 }; tick(); } }
+  }
   el.closeBtn.addEventListener("click", closeWinner);
   el.overlay.addEventListener("click", (e) => { if (e.target === el.overlay) closeWinner(); });
   el.againBtn.addEventListener("click", () => { closeWinner(); spin(); });
@@ -325,7 +350,7 @@
     cv.width = innerWidth * dpr; cv.height = innerHeight * dpr; x.setTransform(dpr, 0, 0, dpr, 0, 0);
     parts = [];
     const colors = [mainColor, ...PALETTE];
-    for (let i = 0; i < 160; i++) parts.push({
+    for (let i = 0; i < (reduceMotion ? 40 : 160); i++) parts.push({
       x: innerWidth / 2 + (Math.random() - 0.5) * 80, y: innerHeight / 2, vx: (Math.random() - 0.5) * 16, vy: -6 - Math.random() * 12,
       w: 6 + Math.random() * 8, h: 4 + Math.random() * 6, r: Math.random() * TAU, vr: (Math.random() - 0.5) * 0.3, c: colors[i % colors.length], life: 1,
     });
@@ -391,7 +416,7 @@
   el.title.addEventListener("input", () => { state.title = el.title.value; changed(); });
 
   function changed() {
-    lastIdx = -1; draw(); syncUrl();
+    lastIdx = -1; revealed = false; glow = null; draw(); syncUrl();
     const ok = canSpin(); el.spinBtn.disabled = !ok || spinning; el.hub.disabled = !ok || spinning; el.emptyHint.hidden = ok;
     document.title = (state.title ? state.title + " · " : "") + "Spin";
     if (activeTab === "share") renderShare();
@@ -411,17 +436,26 @@
   function renderShare() {
     const url = shareLink(); el.shareUrl.value = url;
     try {
-      const q = qrcode(0, "M"); q.addData(url); q.make();
+      const q = qrcode(0, "H"); q.addData(url); q.make();
       const n = q.getModuleCount(), cv = el.qr, x = cv.getContext("2d"); const px = 212, s = px / n, pad = 10;
       cv.width = (px + pad * 2) * 2; cv.height = cv.width; x.setTransform(2, 0, 0, 2, 0, 0);
       x.fillStyle = "#fff"; x.fillRect(0, 0, px + pad * 2, px + pad * 2); x.fillStyle = PLUM;
       for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) x.fillRect(pad + c * s, pad + r * s, s + 0.2, s + 0.2);
-      cv.hidden = false;
+      // the logo in the middle (level H leaves room for it)
+      const lg = px * 0.2, lx = pad + px / 2 - lg / 2;
+      x.fillStyle = "#fff"; roundRect(x, lx - 5, lx - 5, lg + 10, lg + 10, 10); x.fill();
+      if (logoImg.complete && logoImg.naturalWidth) x.drawImage(logoImg, lx, lx, lg, lg); else logoImg.onload = () => renderShare();
+      cv.hidden = false; el.qrDownload.hidden = false;
     } catch (e) { el.qr.hidden = true; }
     dirtyUrl = false;
   }
+  const logoImg = new Image(); logoImg.src = "icon.svg";
+  function roundRect(x, px, py, w, h, r) { x.beginPath(); x.moveTo(px + r, py); x.arcTo(px + w, py, px + w, py + h, r); x.arcTo(px + w, py + h, px, py + h, r); x.arcTo(px, py + h, px, py, r); x.arcTo(px, py, px + w, py, r); x.closePath(); }
+  el.qrDownload.addEventListener("click", () => {
+    const a = document.createElement("a"); a.download = (state.title ? state.title.replace(/[^\w\-]+/g, "-") : "spin") + "-qr.png"; a.href = el.qr.toDataURL("image/png"); a.click();
+  });
   el.copyBtn.addEventListener("click", async () => {
-    try { await navigator.clipboard.writeText(shareLink()); toast("Link copied"); }
+    try { await navigator.clipboard.writeText(shareLink()); toast("Link copied"); el.copyBtn.textContent = "Copied"; setTimeout(() => (el.copyBtn.textContent = "Copy"), 1500); }
     catch (e) { el.shareUrl.select(); document.execCommand && document.execCommand("copy"); toast("Link selected, press copy"); }
   });
   if (navigator.share) { el.nativeShare.hidden = false; el.nativeShare.addEventListener("click", () => navigator.share({ title: state.title || "Spin", url: shareLink() }).catch(() => {})); }
@@ -497,7 +531,7 @@
     const last = loadJSON(LS.last, null);
     applyState(fromLink || last || fresh());
     if (fromLink && fromLink.title) toast("Opened: " + fromLink.title);
-    resize(); renderHistory();
+    resize(); renderHistory(); intro = { t0: performance.now(), dur: 700 }; tick();
     new ResizeObserver(resize).observe(el.wrap);
     window.addEventListener("hashchange", () => { const mm = location.hash.match(/#w=([A-Za-z0-9\-_]+)/); const s = mm && decodeState(mm[1]); if (s) applyState(s); });
     if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
@@ -505,5 +539,5 @@
   boot();
 
   // a tiny hook for tests
-  window.__spin = { get state() { return state; }, spin, encodeState, decodeState, get angle() { return angle; }, slices, indexAt, get spinning() { return spinning; } };
+  window.__spin = { get state() { return state; }, spin, encodeState, decodeState, get angle() { return angle; }, slices, indexAt, get spinning() { return spinning || !!windup; } };
 })();
