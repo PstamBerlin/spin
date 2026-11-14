@@ -5,14 +5,14 @@ Live at spin.peterstam.eu. No accounts, no ads, no server: the whole wheel is pa
 
 ## How it works
 
-- `site/` is the whole website. Open `site/index.html` through any static server.
+- `docs/` is the whole website. Open `docs/index.html` through any static server.
 - The wheel, its options, colours, weights and settings are encoded in the `#w=` part of the link.
 - Saved wheels and the sound/theme preferences live in the browser's localStorage only.
 - `sw.js` caches the app so it keeps working offline after the first visit (only on https).
 
 ## Test
 
-    python3 -m http.server 8771 --bind 127.0.0.1 --directory site
+    python3 -m http.server 8771 --bind 127.0.0.1 --directory docs
     python3 tests/spin_test.py
 
 The test drives a headless Chrome through the wheel: spin, winner, history, link round-trip,
@@ -20,5 +20,5 @@ paste list with weights, QR code, saved wheels, remove-winner mode, theme, drag 
 
 ## Credits
 
-Fonts Unbounded and Manrope (SIL Open Font License, see `site/fonts/OFL.txt`).
+Fonts Unbounded and Manrope (SIL Open Font License, see `docs/fonts/OFL.txt`).
 QR code library by Kazuhiko Arase (MIT).
