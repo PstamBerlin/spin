@@ -393,7 +393,7 @@
   function renderHistory() {
     el.history.hidden = history.length === 0;
     el.historyChips.innerHTML = "";
-    for (const h of history) { const s = document.createElement("span"); s.className = "chip"; s.style.setProperty("--chip-color", PALETTE[h.c % PALETTE.length]); s.textContent = h.t; s.title = h.t; el.historyChips.appendChild(s); }
+    for (const h of history) { const s = document.createElement("span"); s.className = "chip" + (h === history[0] ? " fresh" : ""); s.style.setProperty("--chip-color", PALETTE[h.c % PALETTE.length]); s.textContent = h.t; s.title = h.t; el.historyChips.appendChild(s); }
   }
   el.historyClear.addEventListener("click", () => { history = []; renderHistory(); });
 
@@ -444,7 +444,7 @@
       plus.addEventListener("click", () => { it.w = Math.min(9, it.w + 1); num.textContent = it.w; changed(); });
       wt.append(minus, num, plus); wt.title = "Weight: how many slices this option gets";
       const del = document.createElement("button"); del.className = "del"; del.type = "button"; del.textContent = "×"; del.setAttribute("aria-label", "Remove option");
-      del.addEventListener("click", () => { state.items.splice(i, 1); renderItems(); changed(); });
+      del.addEventListener("click", () => { li.classList.add("leaving"); setTimeout(() => { const k = state.items.indexOf(it); if (k >= 0) state.items.splice(k, 1); renderItems(); changed(); }, reduceMotion ? 0 : 180); });
       li.append(sw, inp, wt, del); el.items.appendChild(li);
     });
   }
@@ -456,6 +456,7 @@
     // avoid two neighbours sharing a colour
     const prev = state.items[idx - 1]; if (prev && prev.c === c) c = (c + 1) % PALETTE.length;
     state.items.splice(idx, 0, { t: "", c, w: 1 }); renderItems(); changed(); focusItem(idx);
+    const li = el.items.children[idx]; if (li) li.classList.add("fresh");
   }
   el.addBtn.addEventListener("click", () => addItem());
   el.clearBtn.addEventListener("click", () => { state.items = [{ t: "", c: 0, w: 1 }, { t: "", c: 1, w: 1 }]; renderItems(); changed(); focusItem(0); });
@@ -598,6 +599,8 @@
   el.resetBtn.addEventListener("click", () => { if (!confirm("Start a fresh wheel? The current one stays reachable through its link.")) return; applyState(fresh()); history = []; renderHistory(); setTab("options"); });
   el.muteBtn.addEventListener("click", () => { prefs.muted = !prefs.muted; el.muteBtn.setAttribute("aria-pressed", String(prefs.muted)); el.muteBtn.setAttribute("aria-label", prefs.muted ? "Unmute sounds" : "Mute sounds"); saveJSON(LS.prefs, prefs); if (!prefs.muted) playTick(10); });
   el.themeBtn.addEventListener("click", () => { const dark = isDark(); prefs.theme = dark ? "light" : "dark"; el.themeSel.value = prefs.theme; applyTheme(); saveJSON(LS.prefs, prefs); });
+  function popIcon(btn) { btn.classList.remove("popped"); void btn.offsetWidth; btn.classList.add("popped"); }
+  [el.muteBtn, el.themeBtn, el.bigBtn].forEach((b) => b.addEventListener("click", () => popIcon(b)));
   function isDark() { const t = document.documentElement.getAttribute("data-theme"); return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; }
   function applyTheme() { if (prefs.theme === "system") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", prefs.theme); }
 
@@ -616,11 +619,24 @@
   function setTab(name) {
     activeTab = name;
     document.querySelectorAll(".tab").forEach((t) => { const on = t.dataset.tab === name; t.classList.toggle("is-active", on); t.setAttribute("aria-selected", String(on)); });
-    document.querySelectorAll(".pane").forEach((p) => { p.hidden = p.id !== "pane-" + name; p.classList.toggle("is-active", !p.hidden); });
+    document.querySelectorAll(".pane").forEach((p) => { const on = p.id === "pane-" + name; p.hidden = !on; p.classList.remove("is-active"); if (on) { void p.offsetWidth; p.classList.add("is-active"); } });
+    if (typeof placeGlider === "function") placeGlider(true);
     if (name === "share") renderShare(); if (name === "saved") renderSaved();
     if (name === "teams") { renderTeams(); setMode("teams"); } if (name === "options") setMode("wheel");
   }
   document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => setTab(t.dataset.tab)));
+  // the glider slides under the active tab (Chalkboard's pill, flattened to a line)
+  const tabsEl = document.querySelector(".tabs"); const glider = document.createElement("span"); glider.className = "tab-glider"; tabsEl.appendChild(glider);
+  function placeGlider(animate) {
+    const t = tabsEl.querySelector(".tab.is-active"); if (!t) return;
+    if (!animate) glider.style.transition = "none";
+    glider.style.left = (t.offsetLeft) + "px"; glider.style.width = t.offsetWidth + "px";
+    tabsEl.classList.add("has-glider");
+    if (!animate) { void glider.offsetWidth; glider.style.transition = ""; }
+    t.scrollIntoView({ block: "nearest", inline: "nearest", behavior: animate && !reduceMotion ? "smooth" : "auto" });
+  }
+  window.addEventListener("resize", () => placeGlider(false));
+  document.fonts && document.fonts.ready.then(() => placeGlider(false));
 
   // toast
   let toastT = 0;
@@ -643,7 +659,7 @@
     const last = loadJSON(LS.last, null);
     applyState(fromLink || last || fresh());
     if (fromLink && fromLink.title) toast("Opened: " + fromLink.title);
-    resize(); renderHistory(); intro = { t0: performance.now(), dur: 700 }; tick();
+    resize(); renderHistory(); intro = { t0: performance.now(), dur: 700 }; tick(); placeGlider(false);
     new ResizeObserver(resize).observe(el.wrap);
     window.addEventListener("hashchange", () => { const mm = location.hash.match(/#w=([A-Za-z0-9\-_]+)/); const s = mm && decodeState(mm[1]); if (s) applyState(s); });
     if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
