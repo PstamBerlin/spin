@@ -17,9 +17,11 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="glass.css">
 </head>
 <body>
 <div class="mesh" aria-hidden="true"></div>
+<div class="orbs" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
 <div class="grain" aria-hidden="true"></div>
 
 <header class="bar frost">
@@ -164,6 +166,13 @@
       <label class="setting switch">
         <span>Hide the labels until it stops<small>For surprises</small></span>
         <input type="checkbox" id="hiddenSel">
+      </label>
+      <label class="setting">
+        <span>Look<small>Liquid glass is a test</small></span>
+        <select id="lookSel" aria-label="Look">
+          <option value="glass">Liquid glass</option>
+          <option value="classic">Classic</option>
+        </select>
       </label>
       <label class="setting">
         <span>Theme</span>

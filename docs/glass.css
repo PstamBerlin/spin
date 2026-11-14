@@ -1,0 +1,111 @@
+/* Liquid glass look (a test, switchable in Settings): clear glass that bends what is behind it,
+   floating capsules, concentric corners, rim light, and a highlight that follows the pointer.
+   Everything here is scoped to :root[data-look="glass"]; without it the classic look is untouched. */
+.orbs{display:none}
+:root[data-look="glass"]{
+  --g-tint:rgba(255,255,255,.14); --g-tint-strong:rgba(255,255,255,.30); --g-rim:rgba(255,255,255,.9); --g-rim-dim:rgba(255,255,255,.22);
+  --g-shadow:0 14px 44px rgba(42,24,56,.20), 0 2px 6px rgba(42,24,56,.10); --g-spec:rgba(255,255,255,.30); --g-blur:9px;
+  --field:rgba(255,255,255,.28); --field-line:rgba(255,255,255,.6); --chip:rgba(255,255,255,.24);
+  --frost-strong:rgba(255,255,255,.5); --frost-line:rgba(255,255,255,.85);
+  --mesh-opacity:.95; --radius:34px; --radius-s:20px; --glider-inset:0;
+}
+:root[data-look="glass"][data-theme="dark"]{
+  --g-tint:rgba(24,12,36,.26); --g-tint-strong:rgba(255,255,255,.14); --g-rim:rgba(255,255,255,.55); --g-rim-dim:rgba(255,255,255,.10);
+  --g-shadow:0 16px 54px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.3); --g-spec:rgba(255,255,255,.14);
+  --field:rgba(255,255,255,.09); --field-line:rgba(255,255,255,.22); --chip:rgba(255,255,255,.12);
+  --frost-strong:rgba(255,255,255,.2); --frost-line:rgba(255,255,255,.4);
+}
+@media (prefers-color-scheme: dark){
+  :root[data-look="glass"]:not([data-theme="light"]){
+    --g-tint:rgba(24,12,36,.26); --g-tint-strong:rgba(255,255,255,.14); --g-rim:rgba(255,255,255,.55); --g-rim-dim:rgba(255,255,255,.10);
+    --g-shadow:0 16px 54px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.3); --g-spec:rgba(255,255,255,.14);
+    --field:rgba(255,255,255,.09); --field-line:rgba(255,255,255,.22); --chip:rgba(255,255,255,.12);
+    --frost-strong:rgba(255,255,255,.2); --frost-line:rgba(255,255,255,.4);
+  }
+}
+
+/* something for the glass to bend: glossy orbs drifting behind everything */
+:root[data-look="glass"] .mesh{filter:blur(28px) saturate(1.25)}
+:root[data-look="glass"] .orbs{display:block;position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
+.orbs i{position:absolute;border-radius:50%;opacity:.92;animation:orb 28s ease-in-out infinite alternate;
+  background:radial-gradient(circle at 32% 28%, rgba(255,255,255,.75), transparent 34%), radial-gradient(circle at 50% 50%, var(--o1), var(--o2))}
+.orbs i:nth-child(1){--o1:#FF8A1F;--o2:#FF3B5C;width:300px;height:300px;right:6%;top:9%}
+.orbs i:nth-child(2){--o1:#2E9BFF;--o2:#9B5CFF;width:210px;height:210px;right:30%;top:52%;animation-duration:34s;animation-delay:-8s}
+.orbs i:nth-child(3){--o1:#FFD400;--o2:#FF8A1F;width:150px;height:150px;right:3%;top:62%;animation-duration:22s;animation-delay:-4s}
+.orbs i:nth-child(4){--o1:#1DE9A6;--o2:#2E9BFF;width:240px;height:240px;left:2%;bottom:4%;animation-duration:38s;animation-delay:-14s}
+.orbs i:nth-child(5){--o1:#FF4FB0;--o2:#9B5CFF;width:170px;height:170px;left:40%;top:-50px;animation-duration:30s;animation-delay:-20s}
+.orbs i:nth-child(6){--o1:#5CE840;--o2:#1DE9A6;width:120px;height:120px;left:6%;top:16%;animation-duration:25s;animation-delay:-11s}
+@keyframes orb{from{transform:translate3d(-3vw,-2vh,0) scale(1)}to{transform:translate3d(4vw,5vh,0) scale(1.08)}}
+@media (prefers-reduced-motion: reduce){.orbs i{animation:none}}
+
+/* the glass itself */
+:root[data-look="glass"] .frost{
+  background:var(--g-tint); border:0;
+  -webkit-backdrop-filter:blur(var(--g-blur)) saturate(1.8) brightness(1.05); backdrop-filter:blur(var(--g-blur)) saturate(1.8) brightness(1.05);
+  box-shadow:inset 0 1.5px 0 var(--g-rim), inset 0 -1px 0 var(--g-rim-dim), inset 1px 0 0 var(--g-rim-dim), inset -1px 0 0 var(--g-rim-dim), inset 0 0 26px rgba(255,255,255,.10), var(--g-shadow);
+}
+/* a soft highlight that sits where the pointer is, shared by every pane of glass */
+:root[data-look="glass"] :is(.bar,.panel,.history,.winner)::after{
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:radial-gradient(460px circle at var(--lx,70%) var(--ly,10%), var(--g-spec), transparent 62%) fixed;
+}
+:root[data-look="glass"] .history{position:relative;border-radius:999px;padding:8px 16px}
+@media (max-width: 899px){:root[data-look="glass"] .panel{position:relative}}
+
+/* the bar floats: a capsule, off the edges */
+:root[data-look="glass"] .bar{
+  top:calc(10px + env(safe-area-inset-top)); margin:10px auto 0; width:min(1132px, calc(100% - 24px));
+  border-radius:999px; padding:7px 10px 7px 16px;
+}
+:root[data-look="glass"] .icon-btn{border-radius:50%}
+:root[data-look="glass"] .icon-btn:hover,:root[data-look="glass"] .icon-btn[aria-pressed="true"]{
+  background:var(--g-tint-strong); border-color:transparent; box-shadow:inset 0 1px 0 var(--g-rim), inset 0 0 0 1px var(--g-rim-dim)}
+
+/* buttons are glass capsules; the main one is tinted glass */
+:root[data-look="glass"] .btn{
+  background:var(--g-tint-strong); border:0;
+  box-shadow:inset 0 1.5px 0 var(--g-rim), inset 0 -1px 0 var(--g-rim-dim), inset 0 0 0 1px var(--g-rim-dim), 0 4px 14px rgba(42,24,56,.12)}
+:root[data-look="glass"] .btn-ghost{background:var(--g-tint)}
+:root[data-look="glass"] .btn-primary{
+  background:linear-gradient(135deg, rgba(255,59,92,.74), rgba(255,138,31,.74));
+  box-shadow:inset 0 1.5px 0 rgba(255,255,255,.8), inset 0 -10px 16px rgba(255,255,255,.14), inset 0 0 0 1px rgba(255,255,255,.32), 0 10px 28px rgba(255,59,92,.34)}
+:root[data-look="glass"] .stage-row .btn{-webkit-backdrop-filter:blur(6px) saturate(1.8); backdrop-filter:blur(6px) saturate(1.8)}
+
+/* the hub is a clear lens over the wheel */
+:root[data-look="glass"] .hub{
+  background:rgba(255,255,255,.13); border:0; color:#fff; text-shadow:0 1px 8px rgba(42,24,56,.75), 0 0 2px rgba(42,24,56,.6);
+  -webkit-backdrop-filter:blur(1.5px) saturate(1.5) brightness(1.08); backdrop-filter:blur(1.5px) saturate(1.5) brightness(1.08);
+  box-shadow:inset 0 2px 1px rgba(255,255,255,.9), inset 0 -2px 1px rgba(255,255,255,.35), inset 0 0 0 1.5px rgba(255,255,255,.4), inset 0 0 18px rgba(255,255,255,.25), 0 10px 30px rgba(42,24,56,.35)}
+:root[data-look="glass"] .hub[aria-busy="true"]{animation:none}
+
+/* tabs: a capsule track with a glass thumb that slides, stretches and settles */
+:root[data-look="glass"] .tabs{margin:8px 0 14px; padding:4px; gap:0; border-radius:999px; background:var(--chip); box-shadow:inset 0 1px 3px rgba(42,24,56,.14), inset 0 0 0 1px var(--g-rim-dim)}
+:root[data-look="glass"] .tab{position:relative; z-index:1; border-bottom:0; border-radius:999px; padding:9px 10px; font-size:14px; flex:1 0 auto}
+:root[data-look="glass"] .tab-glider{
+  top:4px; bottom:4px; height:auto; border-radius:999px; background:var(--frost-strong);
+  box-shadow:inset 0 1.5px 0 var(--g-rim), inset 0 -1px 0 var(--g-rim-dim), inset 0 0 0 1px var(--g-rim-dim), 0 4px 12px rgba(42,24,56,.16)}
+:root[data-look="glass"] .tab-glider.stretch{height:auto; transform:scaleY(calc(1 - .16 * var(--moving))); transition:left 170ms var(--ease-out), width 170ms var(--ease-out), transform 170ms var(--ease-out)}
+:root[data-look="glass"] .tab-glider.settle{height:auto; transition:left var(--t-spring) var(--spring), width var(--t-spring) var(--spring), transform var(--t-spring) var(--spring)}
+
+/* wells and small cards: concentric corners, a soft inner edge */
+:root[data-look="glass"] :is(.item input[type="text"], #teamNames, .paste textarea, .share-row input, .setting select){border-radius:16px; box-shadow:inset 0 1px 3px rgba(42,24,56,.12)}
+:root[data-look="glass"] :is(.preset,.team,.saved li){box-shadow:inset 0 1px 0 var(--g-rim), 0 2px 8px rgba(42,24,56,.06)}
+:root[data-look="glass"] .seg{border-radius:20px; box-shadow:inset 0 1px 3px rgba(42,24,56,.14)}
+:root[data-look="glass"] .seg::before,:root[data-look="glass"] .seg-btn{border-radius:15px}
+:root[data-look="glass"] .seg::before{box-shadow:inset 0 1.5px 0 var(--g-rim), 0 4px 12px rgba(42,24,56,.14)}
+
+/* the winner card and the toast */
+:root[data-look="glass"] .overlay{background:rgba(27,15,36,.16)}
+:root[data-look="glass"] .winner{background:var(--g-tint-strong); border-radius:40px;
+  -webkit-backdrop-filter:blur(16px) saturate(1.9) brightness(1.06); backdrop-filter:blur(16px) saturate(1.9) brightness(1.06)}
+:root[data-look="glass"] .toast{background:rgba(42,24,56,.5); -webkit-backdrop-filter:blur(12px) saturate(1.8); backdrop-filter:blur(12px) saturate(1.8);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.5), inset 0 0 0 1px rgba(255,255,255,.16), 0 10px 30px rgba(0,0,0,.3)}
+
+/* phones: fewer, smaller orbs, kept away from the wheel's name */
+@media (max-width: 700px){
+  .orbs i:nth-child(1){width:150px;height:150px;right:-40px;top:auto;bottom:34%}
+  .orbs i:nth-child(2){width:120px;height:120px;right:auto;left:-30px;top:58%}
+  .orbs i:nth-child(3){width:100px;height:100px;right:8%;top:auto;bottom:6%}
+  .orbs i:nth-child(4){width:140px;height:140px;left:30%;bottom:-40px}
+  .orbs i:nth-child(5),.orbs i:nth-child(6){display:none}
+}

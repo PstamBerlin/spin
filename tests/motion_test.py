@@ -13,6 +13,8 @@ async def main():
         b = await p.chromium.launch(channel="chrome")
         pg = await b.new_page(viewport={"width": 1280, "height": 860})
         errors = []; pg.on("pageerror", lambda e: errors.append(str(e)))
+        # the motion checks run on the classic look (the tab line); the glass look has its own checks at the end
+        await pg.add_init_script("try { localStorage.setItem('spin-prefs-v1', JSON.stringify({ muted: false, theme: 'system', look: 'classic' })); } catch (e) {}")
         await pg.goto(URL); await pg.wait_for_timeout(1200)
         spring = await pg.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--spring')")
         check("spring is a real linear() curve", "linear(" in spring, spring[:30])
@@ -84,6 +86,22 @@ async def main():
         check("preset cards blob in", an == "blob-in", an)
         await pa.locator(".preset").nth(2).click(); await pa.wait_for_timeout(30)
         ap = await pa.locator(".item.appear").count(); check("loaded options cascade in", ap == 6, ap)
+        # liquid glass look (the default while it is being tested)
+        pgl = await b.new_page(viewport={"width": 1280, "height": 860}); pgl.on("pageerror", lambda e: errors.append(str(e)))
+        await pgl.goto(URL); await pgl.wait_for_timeout(1800)
+        g = await pgl.evaluate("""(() => { const t=document.querySelector('.tab.is-active'), gl=document.querySelector('.tab-glider'), tabs=document.querySelector('.tabs');
+          return { look: document.documentElement.dataset.look, lens: document.querySelector('.hub').style.backdropFilter.startsWith('url('), filters: document.querySelectorAll('filter[id^=lens]').length,
+                   pill: Math.abs(parseFloat(gl.style.left) - t.offsetLeft) < 1 && Math.abs(parseFloat(gl.style.width) - t.offsetWidth) < 1, pillH: gl.getBoundingClientRect().height,
+                   fits: tabs.scrollWidth <= tabs.clientWidth + 1, barR: getComputedStyle(document.querySelector('.bar')).borderTopLeftRadius }; })()""")
+        check("glass is the look on a fresh visit", g["look"] == "glass", g["look"])
+        check("hub and panes refract (lens filters attached)", g["lens"] and g["filters"] >= 5, [g["lens"], g["filters"]])
+        check("tab thumb is a full glass pill under its tab", g["pill"] and g["pillH"] > 25, [g["pill"], g["pillH"]])
+        check("all six tabs fit in the capsule", g["fits"])
+        check("bar is a floating capsule", g["barR"] == "999px", g["barR"])
+        await pgl.click('[data-tab="settings"]'); await pgl.wait_for_timeout(700)
+        await pgl.select_option("#lookSel", "classic"); await pgl.wait_for_timeout(300)
+        cl = await pgl.evaluate("[document.documentElement.dataset.look || '', document.querySelector('.hub').style.backdropFilter, JSON.parse(localStorage.getItem('spin-prefs-v1')).look]")
+        check("classic switches the glass off and is remembered", cl == ["", "", "classic"], cl)
         check("no page errors", not errors, errors)
         await b.close()
     print("\n%d failures" % len(fails)); sys.exit(1 if fails else 0)

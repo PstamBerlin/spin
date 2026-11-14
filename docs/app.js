@@ -17,7 +17,7 @@
     pasteToggle: $("pasteToggle"), pasteBox: $("pasteBox"), pasteArea: $("pasteArea"), pasteApply: $("pasteApply"),
     presets: $("presets"), shareUrl: $("shareUrl"), copyBtn: $("copyBtn"), nativeShare: $("nativeShare"), qr: $("qr"), qrDownload: $("qrDownload"),
     saveBtn: $("saveBtn"), savedList: $("savedList"), savedEmpty: $("savedEmpty"),
-    soundSel: $("soundSel"), removeSel: $("removeSel"), hiddenSel: $("hiddenSel"), themeSel: $("themeSel"), resetBtn: $("resetBtn"),
+    soundSel: $("soundSel"), removeSel: $("removeSel"), hiddenSel: $("hiddenSel"), themeSel: $("themeSel"), lookSel: $("lookSel"), resetBtn: $("resetBtn"),
     muteBtn: $("muteBtn"), themeBtn: $("themeBtn"), bigBtn: $("bigBtn"),
     overlay: $("overlay"), confetti: $("confetti"), winnerText: $("winnerText"), winnerSub: $("winnerSub"),
     againBtn: $("againBtn"), removeAgainBtn: $("removeAgainBtn"), closeBtn: $("closeBtn"),
@@ -634,6 +634,61 @@
   function isDark() { const t = document.documentElement.getAttribute("data-theme"); return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; }
   function applyTheme() { if (prefs.theme === "system") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", prefs.theme); }
 
+  // ---------- looks: classic, or liquid glass (a test) ----------
+  // In Chromium the glass really bends what is behind it: each pane gets an SVG displacement map of its own size
+  // (red = sideways, blue = up and down, grey in the middle = no bending), so only the rim refracts, like a lens.
+  const root = document.documentElement;
+  const canLens = !!(navigator.userAgentData && navigator.userAgentData.brands && navigator.userAgentData.brands.some((b) => b.brand === "Chromium"));
+  const LENSES = [
+    { sel: ".bar", blur: 9, edge: 14, scale: 46, sat: 1.8 },
+    { sel: ".panel", blur: 9, edge: 20, scale: 60, sat: 1.8 },
+    { sel: ".history", blur: 8, edge: 12, scale: 40, sat: 1.8 },
+    { sel: ".winner", blur: 14, edge: 22, scale: 70, sat: 1.9 },
+    { sel: ".hub", blur: 1.2, edge: 16, scale: 54, sat: 1.5 },
+    { sel: "#spinBtn", blur: 5, edge: 10, scale: 34, sat: 1.8 },
+    { sel: "#shuffleBtn", blur: 5, edge: 10, scale: 34, sat: 1.8 },
+  ];
+  let lensSvg = null, lensRO = null;
+  function lensMap(w, h, r, edge) {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + " " + h + '">' +
+      '<defs><linearGradient id="r" x1="100%" y1="0%" x2="0%" y2="0%"><stop offset="0%" stop-color="#000"/><stop offset="100%" stop-color="#f00"/></linearGradient>' +
+      '<linearGradient id="b" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#000"/><stop offset="100%" stop-color="#00f"/></linearGradient>' +
+      '<filter id="s" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="' + (edge * 0.45).toFixed(1) + '"/></filter></defs>' +
+      '<rect width="' + w + '" height="' + h + '" fill="#000"/>' +
+      '<rect width="' + w + '" height="' + h + '" rx="' + r + '" fill="url(#r)"/>' +
+      '<rect width="' + w + '" height="' + h + '" rx="' + r + '" fill="url(#b)" style="mix-blend-mode:screen"/>' +
+      '<rect x="' + edge + '" y="' + edge + '" width="' + Math.max(1, w - edge * 2) + '" height="' + Math.max(1, h - edge * 2) + '" rx="' + Math.max(0, r - edge) + '" fill="#808080" filter="url(#s)"/></svg>';
+    return "data:image/svg+xml," + encodeURIComponent(svg);
+  }
+  function setLens(el, cfg, i) {
+    const w = Math.round(el.offsetWidth), h = Math.round(el.offsetHeight); if (!w || !h) return;
+    const key = w + "x" + h; if (el.dataset.lens === key) return; el.dataset.lens = key;
+    const r = Math.min(parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0, w / 2, h / 2), edge = Math.min(cfg.edge, w / 2.2, h / 2.2);
+    let f = lensSvg.querySelector("#lens-" + i);
+    if (!f) { f = document.createElementNS("http://www.w3.org/2000/svg", "filter"); f.id = "lens-" + i; f.setAttribute("color-interpolation-filters", "sRGB"); lensSvg.appendChild(f); }
+    f.setAttribute("x", "0"); f.setAttribute("y", "0"); f.setAttribute("width", w); f.setAttribute("height", h); f.setAttribute("filterUnits", "userSpaceOnUse"); f.setAttribute("primitiveUnits", "userSpaceOnUse");
+    f.innerHTML = '<feImage href="' + lensMap(w, h, r, edge) + '" x="0" y="0" width="' + w + '" height="' + h + '" preserveAspectRatio="none" result="map"/>' +
+      '<feDisplacementMap in="SourceGraphic" in2="map" scale="' + (-cfg.scale) + '" xChannelSelector="R" yChannelSelector="B"/>';
+    el.style.backdropFilter = "url(#lens-" + i + ") blur(" + cfg.blur + "px) saturate(" + cfg.sat + ") brightness(1.05)";
+  }
+  function applyLook() {
+    const glass = prefs.look !== "classic";
+    if (glass) root.setAttribute("data-look", "glass"); else root.removeAttribute("data-look");
+    el.lookSel.value = glass ? "glass" : "classic";
+    if (lensRO) { lensRO.disconnect(); lensRO = null; }
+    LENSES.forEach((cfg) => { const n = document.querySelector(cfg.sel); if (n) { n.style.backdropFilter = ""; delete n.dataset.lens; } });
+    if (glass && canLens) {
+      if (!lensSvg) { lensSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); lensSvg.setAttribute("width", "0"); lensSvg.setAttribute("height", "0"); lensSvg.style.position = "absolute"; lensSvg.setAttribute("aria-hidden", "true"); document.body.appendChild(lensSvg); }
+      lensRO = new ResizeObserver((entries) => entries.forEach((en) => { const i = LENSES.findIndex((c) => en.target.matches(c.sel)); if (i >= 0) setLens(en.target, LENSES[i], i); }));
+      LENSES.forEach((cfg) => { const n = document.querySelector(cfg.sel); if (n) lensRO.observe(n); });
+    }
+    if (typeof placeGlider === "function") requestAnimationFrame(() => placeGlider(false));
+  }
+  el.lookSel.addEventListener("change", () => { prefs.look = el.lookSel.value; saveJSON(LS.prefs, prefs); applyLook(); });
+  // the highlight on the glass follows the pointer
+  let specRaf = 0;
+  window.addEventListener("pointermove", (e) => { if (specRaf || root.getAttribute("data-look") !== "glass") return; specRaf = requestAnimationFrame(() => { specRaf = 0; root.style.setProperty("--lx", e.clientX + "px"); root.style.setProperty("--ly", e.clientY + "px"); }); }, { passive: true });
+
   // big mode
   function setBig(on) {
     document.body.classList.toggle("big", on); el.bigBtn.setAttribute("aria-pressed", String(on));
@@ -696,7 +751,8 @@
   let gliderT = 0;
   function placeGlider(animate) {
     const t = tabsEl.querySelector(".tab.is-active"); if (!t) return;
-    const L = t.offsetLeft + 10, W = Math.max(8, t.offsetWidth - 20);
+    const inset = parseFloat(getComputedStyle(tabsEl).getPropertyValue("--glider-inset")); const pad = Number.isFinite(inset) ? inset : 10;
+    const L = t.offsetLeft + pad, W = Math.max(8, t.offsetWidth - pad * 2);
     tabsEl.classList.add("has-glider"); clearTimeout(gliderT);
     const curL = parseFloat(glider.style.left), curW = parseFloat(glider.style.width);
     if (!animate || reduceMotion || !(curW > 0)) {
@@ -727,7 +783,7 @@
   }
   function boot() {
     setTimeout(() => document.body.classList.add("ready"), 1400);
-    applyTheme(); el.themeSel.value = prefs.theme; el.muteBtn.setAttribute("aria-pressed", String(!!prefs.muted));
+    applyTheme(); applyLook(); el.themeSel.value = prefs.theme; el.muteBtn.setAttribute("aria-pressed", String(!!prefs.muted));
     const m = location.hash.match(/#w=([A-Za-z0-9\-_]+)/);
     const fromLink = m && decodeState(m[1]);
     const last = loadJSON(LS.last, null);
@@ -741,5 +797,5 @@
   boot();
 
   // a tiny hook for tests
-  window.__spin = { get state() { return state; }, spin, encodeState, decodeState, get angle() { return angle; }, slices, indexAt, get spinning() { return spinning || !!windup; }, shown() { return [...lay.cur.values()]; } };
+  window.__spin = { get state() { return state; }, spin, encodeState, decodeState, get angle() { return angle; }, slices, indexAt, get spinning() { return spinning || !!windup; }, canLens, shown() { return [...lay.cur.values()]; } };
 })();

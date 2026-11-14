@@ -1,6 +1,6 @@
 /* Spin offline shell: cache first, refresh in the background. */
-const VERSION = "spin-v1";
-const SHELL = ["./", "./index.html", "./style.css", "./app.js", "./qrcode.js", "./icon.svg", "./manifest.webmanifest",
+const VERSION = "spin-v2";
+const SHELL = ["./", "./index.html", "./style.css", "./glass.css", "./app.js", "./qrcode.js", "./icon.svg", "./manifest.webmanifest",
   "./fonts/Manrope-500.woff2", "./fonts/Manrope-700.woff2", "./fonts/Manrope-800.woff2", "./fonts/Unbounded-500.woff2", "./fonts/Unbounded-800.woff2"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", (e) => { e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
