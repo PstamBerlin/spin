@@ -1,7 +1,7 @@
 /* Liquid glass look (a test, switchable in Settings): clear glass that bends what is behind it,
    floating capsules, concentric corners, rim light, and a highlight that follows the pointer.
+   Nothing decorative sits behind it: the wheel is what the glass bends.
    Everything here is scoped to :root[data-look="glass"]; without it the classic look is untouched. */
-.orbs{display:none}
 :root[data-look="glass"]{
   --g-tint:rgba(255,255,255,.14); --g-tint-strong:rgba(255,255,255,.30); --g-rim:rgba(255,255,255,.9); --g-rim-dim:rgba(255,255,255,.22);
   --g-shadow:0 14px 44px rgba(42,24,56,.20), 0 2px 6px rgba(42,24,56,.10); --g-spec:rgba(255,255,255,.30); --g-blur:9px;
@@ -24,19 +24,7 @@
   }
 }
 
-/* something for the glass to bend: glossy orbs drifting behind everything */
 :root[data-look="glass"] .mesh{filter:blur(28px) saturate(1.25)}
-:root[data-look="glass"] .orbs{display:block;position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
-.orbs i{position:absolute;border-radius:50%;opacity:.92;animation:orb 28s ease-in-out infinite alternate;
-  background:radial-gradient(circle at 32% 28%, rgba(255,255,255,.75), transparent 34%), radial-gradient(circle at 50% 50%, var(--o1), var(--o2))}
-.orbs i:nth-child(1){--o1:#FF8A1F;--o2:#FF3B5C;width:300px;height:300px;right:6%;top:9%}
-.orbs i:nth-child(2){--o1:#2E9BFF;--o2:#9B5CFF;width:210px;height:210px;right:30%;top:52%;animation-duration:34s;animation-delay:-8s}
-.orbs i:nth-child(3){--o1:#FFD400;--o2:#FF8A1F;width:150px;height:150px;right:3%;top:62%;animation-duration:22s;animation-delay:-4s}
-.orbs i:nth-child(4){--o1:#1DE9A6;--o2:#2E9BFF;width:240px;height:240px;left:2%;bottom:4%;animation-duration:38s;animation-delay:-14s}
-.orbs i:nth-child(5){--o1:#FF4FB0;--o2:#9B5CFF;width:170px;height:170px;left:40%;top:-50px;animation-duration:30s;animation-delay:-20s}
-.orbs i:nth-child(6){--o1:#5CE840;--o2:#1DE9A6;width:120px;height:120px;left:6%;top:16%;animation-duration:25s;animation-delay:-11s}
-@keyframes orb{from{transform:translate3d(-3vw,-2vh,0) scale(1)}to{transform:translate3d(4vw,5vh,0) scale(1.08)}}
-@media (prefers-reduced-motion: reduce){.orbs i{animation:none}}
 
 /* the glass itself */
 :root[data-look="glass"] .frost{
@@ -100,12 +88,3 @@
   -webkit-backdrop-filter:blur(16px) saturate(1.9) brightness(1.06); backdrop-filter:blur(16px) saturate(1.9) brightness(1.06)}
 :root[data-look="glass"] .toast{background:rgba(42,24,56,.5); -webkit-backdrop-filter:blur(12px) saturate(1.8); backdrop-filter:blur(12px) saturate(1.8);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.5), inset 0 0 0 1px rgba(255,255,255,.16), 0 10px 30px rgba(0,0,0,.3)}
-
-/* phones: fewer, smaller orbs, kept away from the wheel's name */
-@media (max-width: 700px){
-  .orbs i:nth-child(1){width:150px;height:150px;right:-40px;top:auto;bottom:34%}
-  .orbs i:nth-child(2){width:120px;height:120px;right:auto;left:-30px;top:58%}
-  .orbs i:nth-child(3){width:100px;height:100px;right:8%;top:auto;bottom:6%}
-  .orbs i:nth-child(4){width:140px;height:140px;left:30%;bottom:-40px}
-  .orbs i:nth-child(5),.orbs i:nth-child(6){display:none}
-}
