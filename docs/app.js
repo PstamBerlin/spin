@@ -213,7 +213,7 @@
   function resize() {
     const r = el.wrap.getBoundingClientRect();
     dpr = Math.min(lite ? 2 : 2.5, window.devicePixelRatio || 1);
-    fitCache.clear(); hiGrad = null; lensGrad = null;
+    fitCache.clear(); hiGrad = null;
     size = Math.max(200, Math.floor(r.width));
     el.canvas.width = Math.floor(size * dpr); el.canvas.height = Math.floor(size * dpr);
     draw();
@@ -280,31 +280,42 @@
     x.fillStyle = "#FFF4E6"; x.fill(); x.lineWidth = 2; x.strokeStyle = PLUM; x.stroke();
     x.restore();
   }
-  const fitCache = new Map(); let hiGrad = null, lensGrad = null;
-  // In the glass look the hub is a drop of liquid glass, and the wheel draws what you see through it: inside the
-  // hub's circle the slices are drawn again with their edges bent into a swirl (most in the middle of the drop,
-  // nothing at its rim and its centre, so they still meet the wheel outside). The swirl winds up with the speed
-  // of the spin and unwinds as the wheel slows, the way liquid lags behind. A browser filter over a spinning
-  // wheel is run again for every frame; this is a few small fills, in every browser. (x is centred, not rotated.)
+  const fitCache = new Map(); let hiGrad = null;
+  // In the glass look the hub is a little lens, and the wheel draws what you see through it. It is the same
+  // bend the hub used to get from a browser filter (an SVG displacement map): seen through the lens the wheel
+  // is stretched sideways and squeezed up and down, hardly at all in the middle and most at the rim, so the
+  // slices above and below the hub are pinched into narrow tongues while the level and the upright lines stay
+  // straight. A point at angle f on the glass shows the wheel at angle q with tan q = tan f x (1-b)/(1+b), so
+  // each slice edge is a curve that can be drawn directly. The filter was run again for every frame of a spin;
+  // this is a few small fills, in every browser. (x is centred on the wheel and not rotated: the lens stands
+  // still while the wheel turns under it.)
+  // The lens is drawn small on a canvas of its own and laid over the hub enlarged, which gives it the soft,
+  // slightly out-of-focus edges real glass has (the filter had a small blur for that) at no cost.
+  let lensCv = null, lensX = null;
   function drawLens(x, sl) {
-    const hr = size * 0.095, K = 9;   // the hub button is 19% of the wheel across
-    const twist = 0.5 + Math.max(-0.9, Math.min(0.9, vel * 0.045));
-    const edge = (a, k) => { const t = k / K, r = hr * t, q = a + twist * Math.sin(Math.PI * t); return [Math.cos(q) * r, Math.sin(q) * r]; };
-    x.save(); x.beginPath(); x.arc(0, 0, hr, 0, TAU); x.clip(); x.rotate(angle);
+    const hr = size * 0.095, K = 10, LS = 0.62;            // the hub button is 19% of the wheel across
+    const d = Math.max(8, Math.ceil(hr * 2 * LS));
+    if (!lensCv) { lensCv = document.createElement("canvas"); lensX = lensCv.getContext("2d"); }
+    if (lensCv.width !== d) { lensCv.width = d; lensCv.height = d; }
+    const g = lensX, k = Math.min(0.8, 25 / hr);           // about as strong as the old filter was
+    const at = (q, i) => {                                  // where the wheel's angle q shows at ring i of the lens
+      const t = i / K, u = Math.max(0, (t - 0.38) / 0.62), b = k * u * u * (3 - 2 * u), sq = Math.sin(q), cq = Math.cos(q);   // no bend in the middle, all of it towards the rim
+      const f = q + Math.atan2(sq * (1 + b), cq * (1 - b)) - Math.atan2(sq, cq);
+      return [Math.cos(f) * hr * t, Math.sin(f) * hr * t, f];
+    };
+    g.setTransform(LS, 0, 0, LS, d / 2, d / 2); g.lineJoin = "round";
+    g.lineWidth = sl.length > 1 ? 1.4 : 0; g.strokeStyle = "rgba(42,24,56,.26)";   // the wheel's dark lines, seen through the glass
     for (const s of sl) {
-      x.beginPath(); x.moveTo(0, 0);
-      for (let k = 1; k <= K; k++) { const p = edge(s.start, k); x.lineTo(p[0], p[1]); }
-      x.arc(0, 0, hr, s.start, s.end);
-      for (let k = K - 1; k >= 1; k--) { const p = edge(s.end, k); x.lineTo(p[0], p[1]); }
-      x.closePath(); x.fillStyle = PALETTE[s.it.c % PALETTE.length]; x.fill();
+      const q0 = s.start + angle, q1 = s.end + angle;
+      g.beginPath(); g.moveTo(0, 0);
+      let p; for (let i = 1; i <= K; i++) { p = at(q0, i); g.lineTo(p[0], p[1]); }
+      g.arc(0, 0, hr * 1.1, p[2], at(q1, K)[2]);
+      for (let i = K - 1; i >= 1; i--) { p = at(q1, i); g.lineTo(p[0], p[1]); }
+      g.closePath(); g.fillStyle = PALETTE[s.it.c % PALETTE.length]; g.fill(); if (sl.length > 1) g.stroke();
     }
-    x.rotate(-angle);
-    if (!lensGrad || lensGrad.hr !== hr) {   // the drop's own shade: clear in the middle, a little darker at the edge
-      const g = x.createRadialGradient(0, 0, hr * 0.4, 0, 0, hr);
-      g.addColorStop(0, "rgba(42,24,56,0)"); g.addColorStop(0.82, "rgba(42,24,56,.06)"); g.addColorStop(1, "rgba(42,24,56,.26)");
-      lensGrad = { hr, g };
-    }
-    x.fillStyle = lensGrad.g; x.fillRect(-hr, -hr, hr * 2, hr * 2);
+    x.save(); x.beginPath(); x.arc(0, 0, hr, 0, TAU); x.clip();
+    x.imageSmoothingEnabled = true; x.imageSmoothingQuality = "high";
+    x.drawImage(lensCv, -hr, -hr, hr * 2, hr * 2);
     x.restore();
   }
   function fit(x, text, maxW) {
