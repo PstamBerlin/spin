@@ -90,7 +90,7 @@
   top:4px; bottom:4px; height:auto; border-radius:999px; background:var(--frost-strong);
   box-shadow:inset 0 1.5px 0 var(--g-rim), inset 0 -1px 0 var(--g-rim-dim), inset 0 0 0 1px var(--g-rim-dim), 0 4px 12px rgba(42,24,56,.16)}
 :root[data-look="glass"] .tab-glider.stretch{height:auto; transform:scaleY(calc(1 - .16 * var(--moving))); transition:left 170ms var(--ease-out), width 170ms var(--ease-out), transform 170ms var(--ease-out)}
-:root[data-look="glass"] .tab-glider.settle{height:auto; transition:left var(--t-spring) var(--spring), width var(--t-spring) var(--spring), transform var(--t-spring) var(--spring)}
+:root[data-look="glass"] .tab-glider.settle{height:auto; transition:left var(--t-spring) var(--glide), width var(--t-spring) var(--glide), transform var(--t-spring) var(--spring)}
 
 /* wells and small cards: concentric corners, a soft inner edge */
 :root[data-look="glass"] :is(.item input[type="text"], #teamNames, .paste textarea, .share-row input, .setting select){border-radius:16px; box-shadow:inset 0 1px 3px rgba(42,24,56,.12)}

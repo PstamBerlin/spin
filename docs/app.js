@@ -17,7 +17,7 @@
     pasteToggle: $("pasteToggle"), pasteBox: $("pasteBox"), pasteArea: $("pasteArea"), pasteApply: $("pasteApply"),
     presets: $("presets"), shareUrl: $("shareUrl"), copyBtn: $("copyBtn"), nativeShare: $("nativeShare"), qr: $("qr"), qrDownload: $("qrDownload"),
     saveBtn: $("saveBtn"), savedList: $("savedList"), savedEmpty: $("savedEmpty"),
-    soundSel: $("soundSel"), removeSel: $("removeSel"), hiddenSel: $("hiddenSel"), themeSel: $("themeSel"), lookSel: $("lookSel"), resetBtn: $("resetBtn"),
+    soundSel: $("soundSel"), removeSel: $("removeSel"), hiddenSel: $("hiddenSel"), themeSel: $("themeSel"), lookSel: $("lookSel"), springSel: $("springSel"), resetBtn: $("resetBtn"),
     muteBtn: $("muteBtn"), themeBtn: $("themeBtn"), bigBtn: $("bigBtn"),
     overlay: $("overlay"), confetti: $("confetti"), winnerText: $("winnerText"), winnerSub: $("winnerSub"),
     againBtn: $("againBtn"), removeAgainBtn: $("removeAgainBtn"), closeBtn: $("closeBtn"),
@@ -890,19 +890,28 @@
   el.bigBtn.addEventListener("click", () => setBig(!document.body.classList.contains("big")));
   document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement && document.body.classList.contains("big")) setBig(false); });
 
-  // pull: the big buttons lean toward the pointer and spring back when it leaves
+  // springy animations (Settings, off at first). Off is calm: when you change something the tab line and the
+  // choice thumb are still pulled across, but nothing leans, squashes or overshoots. On: every button and the
+  // small things (choices, colour swatches, presets) lean toward the pointer and spring back when it leaves.
+  function applySpring() { document.documentElement.toggleAttribute("data-spring", !!prefs.spring); el.springSel.checked = !!prefs.spring; }
+  el.springSel.addEventListener("change", () => { prefs.spring = el.springSel.checked; saveJSON(LS.prefs, prefs); applySpring(); });
+  applySpring();
   if (!reduceMotion && matchMedia("(hover: hover) and (pointer: fine)").matches) {
-    document.querySelectorAll(".btn-primary, .hub, .icon-btn").forEach((b) => {
-      const k = b.classList.contains("hub") ? 0.1 : b.classList.contains("icon-btn") ? 0.2 : 0.15;
-      b.addEventListener("pointermove", (e) => {
-        if (b.disabled) return;
-        const r = b.getBoundingClientRect();
-        b.classList.add("pulling");
-        b.style.setProperty("--mx", ((e.clientX - (r.left + r.width / 2)) * k).toFixed(1) + "px");
-        b.style.setProperty("--my", ((e.clientY - (r.top + r.height / 2)) * k).toFixed(1) + "px");
-      });
-      b.addEventListener("pointerleave", () => { b.classList.remove("pulling"); b.style.setProperty("--mx", "0px"); b.style.setProperty("--my", "0px"); });
-    });
+    const PULL = ".btn, .hub, .icon-btn, .seg-btn, .swatch, .preset";
+    let cur = null;
+    const letGo = () => { if (!cur) return; cur.classList.remove("pulling"); cur.style.setProperty("--mx", "0px"); cur.style.setProperty("--my", "0px"); cur = null; };
+    document.addEventListener("pointermove", (e) => {
+      const b = prefs.spring && e.target.closest ? e.target.closest(PULL) : null;
+      if (b !== cur) letGo();
+      if (!b || b.disabled) return;
+      cur = b;
+      const r = b.getBoundingClientRect();
+      const k = b.classList.contains("hub") ? 0.1 : b.classList.contains("icon-btn") ? 0.2 : b.classList.contains("btn-primary") ? 0.15 : 0.12;
+      b.classList.add("pulling");
+      b.style.setProperty("--mx", ((e.clientX - (r.left + r.width / 2)) * k).toFixed(1) + "px");
+      b.style.setProperty("--my", ((e.clientY - (r.top + r.height / 2)) * k).toFixed(1) + "px");
+    }, { passive: true });
+    document.addEventListener("pointerout", (e) => { if (!e.relatedTarget) letGo(); });
   }
   // pull the winner card down to dismiss it; it stretches like rubber and springs back if you let go early
   const card = document.querySelector(".winner"); let pull = null;

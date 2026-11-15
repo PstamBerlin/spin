@@ -16,8 +16,9 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="style.css?v=c2c959b0">
-<link rel="stylesheet" href="glass.css?v=ec57274c">
+<script>/* Springy animations is remembered; set before anything is drawn */ try { if (JSON.parse(localStorage.getItem("spin-prefs-v1") || "{}").spring) document.documentElement.setAttribute("data-spring", ""); } catch (e) {}</script>
+<link rel="stylesheet" href="style.css?v=6347bf82">
+<link rel="stylesheet" href="glass.css?v=dfe5d02b">
 </head>
 <body>
 <div class="mesh" aria-hidden="true"></div>
@@ -166,6 +167,10 @@
         <span>Hide the labels until it stops<small>For surprises</small></span>
         <input type="checkbox" id="hiddenSel">
       </label>
+      <label class="setting switch">
+        <span>Springy animations<small>Buttons lean and squash, small things pop</small></span>
+        <input type="checkbox" id="springSel">
+      </label>
       <label class="setting">
         <span>Look<small>Liquid glass is experimental</small></span>
         <select id="lookSel" aria-label="Look">
@@ -207,6 +212,6 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="qrcode.js?v=4c79be16"></script>
-<script src="app.js?v=3e0592f9"></script>
+<script src="app.js?v=7765966b"></script>
 </body>
 </html>

@@ -16,8 +16,8 @@ async def main():
         # the motion checks run on the classic look (the tab line); the glass look has its own checks at the end
         await pg.add_init_script("try { localStorage.setItem('spin-prefs-v1', JSON.stringify({ muted: false, theme: 'system', look: 'classic' })); } catch (e) {}")
         await pg.goto(URL); await pg.wait_for_timeout(1200)
-        spring = await pg.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--spring')")
-        check("spring is a real linear() curve", "linear(" in spring, spring[:30])
+        spring = await pg.evaluate("[getComputedStyle(document.documentElement).getPropertyValue('--spring'), getComputedStyle(document.documentElement).getPropertyValue('--glide'), document.documentElement.hasAttribute('data-spring'), document.getElementById('springSel').checked]")
+        check("springy animations are off at first: calm, but the basic pull keeps a real linear() spring", "linear(" not in spring[0] and "linear(" in spring[1] and spring[2:] == [False, False], [spring[0][:24], spring[1][:20], spring[2:]])
         # tab line
         rest = await pg.evaluate(GL)
         tab = await pg.evaluate("(() => { const t=document.querySelector('.tab.is-active'); return [t.offsetLeft, t.offsetWidth]; })()")
@@ -38,8 +38,14 @@ async def main():
         await pg.evaluate("document.activeElement.blur()"); await pg.wait_for_timeout(900)
         back = await pg.evaluate("getComputedStyle(document.getElementById('titleInput')).backgroundSize")
         check("and shrinks back on blur", back.startswith("0%"), back)
-        # pointer pull
+        # pointer pull: nothing leans while springy is off
         box = await pg.locator("#spinBtn").bounding_box()
+        await pg.mouse.move(box["x"] + box["width"] - 6, box["y"] + box["height"] / 2); await pg.wait_for_timeout(200)
+        calm = await pg.evaluate("[document.getElementById('spinBtn').style.getPropertyValue('--mx'), getComputedStyle(document.getElementById('spinBtn')).transform]")
+        check("with springy off, the spin button does not lean", calm[0] in ("", "0px") and calm[1] in ("none", "matrix(1, 0, 0, 1, 0, 0)"), calm)
+        await pg.mouse.move(10, 400); await pg.evaluate("document.getElementById('springSel').click()"); await pg.wait_for_timeout(150)
+        on = await pg.evaluate("[document.documentElement.hasAttribute('data-spring'), getComputedStyle(document.documentElement).getPropertyValue('--spring').includes('linear('), JSON.parse(localStorage.getItem('spin-prefs-v1')).spring]")
+        check("the Settings switch turns springy animations on and remembers it", on == [True, True, True], on)
         await pg.mouse.move(box["x"] + box["width"] - 6, box["y"] + box["height"] / 2); await pg.wait_for_timeout(200)
         mx = await pg.evaluate("parseFloat(document.getElementById('spinBtn').style.getPropertyValue('--mx'))")
         check("spin button is pulled toward the pointer", mx > 4, mx)

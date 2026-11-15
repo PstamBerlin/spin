@@ -20,12 +20,13 @@
      lines grow and shrink, and what you press squashes like jelly.
      --moving is 1 while things may travel or scale and 0 when only fades are left. */
   --ease:cubic-bezier(.22,.61,.36,1); --ease-out:cubic-bezier(.22,1,.36,1); --ease-spring:cubic-bezier(.34,1.56,.64,1);
-  --spring:var(--ease-spring); --spring-soft:var(--ease-out); --t-spring:420ms;
+  --spring:var(--ease-spring); --spring-soft:var(--ease-out); --glide:var(--ease-spring); --t-spring:420ms;
   --dur-1:120ms; --dur-2:200ms; --dur-3:320ms; --dur-4:460ms; --moving:1;
 }
 @supports (transition-timing-function: linear(0, 1)){
   :root{
     --spring:linear(0,0.082,0.27,0.495,0.708,0.883,1.007,1.082,1.115,1.118,1.102,1.077,1.05,1.026,1.007,0.995,0.988,0.986,0.986,0.989,0.992,0.995,0.998,1,1.001,1.002,1.002,1.002,1);
+    --glide:linear(0,0.082,0.27,0.495,0.708,0.883,1.007,1.082,1.115,1.118,1.102,1.077,1.05,1.026,1.007,0.995,0.988,0.986,0.986,0.989,0.992,0.995,0.998,1,1.001,1.002,1.002,1.002,1);   /* the basic pull keeps its spring even when springy animations are off */
     --spring-soft:linear(0,0.045,0.151,0.285,0.427,0.56,0.678,0.776,0.855,0.915,0.958,0.988,1.008,1.019,1.024,1.025,1.024,1.021,1.018,1.014,1.011,1.008,1.005,1.003,1.002,1.001,1,1,1);
     --t-spring:540ms;
   }
@@ -243,7 +244,7 @@ body.big .wheel-wrap{animation:big-in var(--t-spring) var(--spring-soft)}
 /* the tab line is liquid: it stretches thin across both tabs, then shrinks back, thicker, onto the new one */
 .tab-glider{position:absolute;left:0;bottom:0;height:4px;width:0;border-radius:999px;background:linear-gradient(90deg,var(--coral),var(--mango));pointer-events:none}
 .tab-glider.stretch{height:2px;transition:left 170ms var(--ease-out),width 170ms var(--ease-out),height 170ms var(--ease-out)}
-.tab-glider.settle{transition:left var(--t-spring) var(--spring),width var(--t-spring) var(--spring),height var(--dur-3) var(--ease-out)}
+.tab-glider.settle{transition:left var(--t-spring) var(--glide),width var(--t-spring) var(--glide),height var(--dur-3) var(--ease-out)}
 .pane[hidden]{display:none}
 /* a pane's rows drip in one after the other, a little stretched, and settle */
 @keyframes drip-in{from{opacity:0;transform:translateY(calc(-8px * var(--moving))) scaleY(calc(1 + .06 * var(--moving)))}}
@@ -300,7 +301,7 @@ body.big .wheel-wrap{animation:big-in var(--t-spring) var(--spring-soft)}
 .seg{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:12px;padding:5px;border-radius:16px;background:var(--chip);position:relative}
 /* the thumb slides over with a spring and squishes on the way */
 .seg::before{content:"";position:absolute;top:5px;bottom:5px;left:5px;width:calc(50% - 8px);border-radius:12px;background:var(--frost-strong);border:1px solid var(--frost-line);box-shadow:0 4px 14px rgba(42,24,56,.12);
-  transition:left var(--t-spring) var(--spring)}
+  transition:left var(--t-spring) var(--glide)}
 .seg.is-all::before{left:calc(50% + 3px)}
 .seg.squish::before{animation:thumb-squish 380ms var(--ease-out)}
 @keyframes thumb-squish{35%{transform:scale(calc(1 + .09 * var(--moving)),calc(1 - .08 * var(--moving)))}}
@@ -431,3 +432,22 @@ body.big .winner-text{font-size:clamp(40px,10vw,110px)}
 :root.lite[data-theme="dark"]:not([data-look="glass"]) .winner{background:rgba(42,24,56,.95)}
 @media (prefers-color-scheme: dark){:root.lite:not([data-theme="light"]):not([data-look="glass"]) .winner{background:rgba(42,24,56,.95)}}
 :root.lite .items{overscroll-behavior:contain}
+
+/* ---- springy animations: a switch in Settings, off at first ----
+   Off: calm. Changing something still pulls the tab line and the choice thumb across (they keep their own
+   spring, --glide), but nothing leans, squashes, stretches or overshoots, and things arrive without bouncing.
+   On: the full liquid motion, and every button and small thing leans toward the pointer (app.js). */
+:root:not([data-spring]){--spring:var(--ease-out);--spring-soft:var(--ease-out)}
+:root:not([data-spring]) .btn:hover,:root:not([data-spring]) .btn:active,:root:not([data-spring]) .icon-btn:active,:root:not([data-spring]) .swatch:hover,:root:not([data-spring]) .swatch:active,:root:not([data-spring]) .seg-btn:active,:root:not([data-spring]) .preset:hover,:root:not([data-spring]) .preset:active{transform:none}
+:root:not([data-spring]) .hub:hover,:root:not([data-spring]) .hub:active{transform:translate(-50%,-50%)}
+:root:not([data-spring]) .seg.squish::before,:root:not([data-spring]) .icon-btn.popped .ico{animation:none}
+:root:not([data-spring]) .switch input:active::after{width:20px}
+:root:not([data-spring]) .switch input:checked:active::after{transform:translateX(20px)}
+:root[data-spring] .seg-btn,:root[data-spring] .preset,:root[data-spring] .swatch{transform:translate(var(--mx,0px),var(--my,0px))}
+:root[data-spring] .seg-btn,:root[data-spring] .preset{transition:background var(--dur-2) var(--ease),color var(--dur-2) var(--ease),border-color var(--dur-1) var(--ease),transform var(--t-spring) var(--spring)}
+:root[data-spring] .seg-btn.pulling,:root[data-spring] .preset.pulling,:root[data-spring] .swatch.pulling{transition:background var(--dur-2) var(--ease),color var(--dur-2) var(--ease),border-color var(--dur-1) var(--ease),transform 90ms var(--ease-out)}
+:root[data-spring] .swatch:hover{transform:translate(var(--mx,0px),calc(var(--my,0px) - 2px * var(--moving))) scale(calc(1 + .08 * var(--moving)))}
+:root[data-spring] .swatch:active{transform:translate(var(--mx,0px),var(--my,0px)) scale(calc(1 + .1 * var(--moving)),calc(1 - .12 * var(--moving)));transition-duration:70ms}
+:root[data-spring] .seg-btn:active{transform:translate(var(--mx,0px),var(--my,0px)) scale(calc(1 + .04 * var(--moving)),calc(1 - .07 * var(--moving)));transition-duration:70ms}
+:root[data-spring] .preset:hover{transform:translate(var(--mx,0px),calc(var(--my,0px) - 2px * var(--moving)))}
+:root[data-spring] .preset:active{transform:translate(var(--mx,0px),var(--my,0px)) scale(calc(1 + .03 * var(--moving)),calc(1 - .05 * var(--moving)));transition-duration:70ms}
