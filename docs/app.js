@@ -213,7 +213,7 @@
   function resize() {
     const r = el.wrap.getBoundingClientRect();
     dpr = Math.min(lite ? 2 : 2.5, window.devicePixelRatio || 1);
-    fitCache.clear(); hiGrad = null;
+    fitCache.clear(); hiGrad = null; lensGrad = null;
     size = Math.max(200, Math.floor(r.width));
     el.canvas.width = Math.floor(size * dpr); el.canvas.height = Math.floor(size * dpr);
     draw();
@@ -264,6 +264,7 @@
     if (n > 1) for (const s of sl) { x.beginPath(); x.arc(Math.cos(s.start) * (R + c * 0.02), Math.sin(s.start) * (R + c * 0.02), c * 0.012, 0, TAU); x.fillStyle = "rgba(255,255,255,.75)"; x.fill(); }
     // glass highlight (frost)
     x.rotate(-angle);
+    if (glassOn && n > 0) drawLens(x, sl);
     if (!hiGrad || hiGrad.R !== R) {
       const g = x.createRadialGradient(-R * 0.4, -R * 0.5, 0, 0, 0, R * 1.1);
       g.addColorStop(0, "rgba(255,255,255,.2)"); g.addColorStop(0.5, "rgba(255,255,255,.03)"); g.addColorStop(1, "rgba(255,255,255,0)");
@@ -279,7 +280,33 @@
     x.fillStyle = "#FFF4E6"; x.fill(); x.lineWidth = 2; x.strokeStyle = PLUM; x.stroke();
     x.restore();
   }
-  const fitCache = new Map(); let hiGrad = null;
+  const fitCache = new Map(); let hiGrad = null, lensGrad = null;
+  // In the glass look the hub is a drop of liquid glass, and the wheel draws what you see through it: inside the
+  // hub's circle the slices are drawn again with their edges bent into a swirl (most in the middle of the drop,
+  // nothing at its rim and its centre, so they still meet the wheel outside). The swirl winds up with the speed
+  // of the spin and unwinds as the wheel slows, the way liquid lags behind. A browser filter over a spinning
+  // wheel is run again for every frame; this is a few small fills, in every browser. (x is centred, not rotated.)
+  function drawLens(x, sl) {
+    const hr = size * 0.095, K = 9;   // the hub button is 19% of the wheel across
+    const twist = 0.5 + Math.max(-0.9, Math.min(0.9, vel * 0.045));
+    const edge = (a, k) => { const t = k / K, r = hr * t, q = a + twist * Math.sin(Math.PI * t); return [Math.cos(q) * r, Math.sin(q) * r]; };
+    x.save(); x.beginPath(); x.arc(0, 0, hr, 0, TAU); x.clip(); x.rotate(angle);
+    for (const s of sl) {
+      x.beginPath(); x.moveTo(0, 0);
+      for (let k = 1; k <= K; k++) { const p = edge(s.start, k); x.lineTo(p[0], p[1]); }
+      x.arc(0, 0, hr, s.start, s.end);
+      for (let k = K - 1; k >= 1; k--) { const p = edge(s.end, k); x.lineTo(p[0], p[1]); }
+      x.closePath(); x.fillStyle = PALETTE[s.it.c % PALETTE.length]; x.fill();
+    }
+    x.rotate(-angle);
+    if (!lensGrad || lensGrad.hr !== hr) {   // the drop's own shade: clear in the middle, a little darker at the edge
+      const g = x.createRadialGradient(0, 0, hr * 0.4, 0, 0, hr);
+      g.addColorStop(0, "rgba(42,24,56,0)"); g.addColorStop(0.82, "rgba(42,24,56,.06)"); g.addColorStop(1, "rgba(42,24,56,.26)");
+      lensGrad = { hr, g };
+    }
+    x.fillStyle = lensGrad.g; x.fillRect(-hr, -hr, hr * 2, hr * 2);
+    x.restore();
+  }
   function fit(x, text, maxW) {
     const key = x.font + "|" + Math.round(maxW) + "|" + text; const hit = fitCache.get(key); if (hit !== undefined) return hit;
     const out = fitRaw(x, text, maxW); if (fitCache.size > 600) fitCache.clear(); fitCache.set(key, out); return out;
@@ -414,7 +441,7 @@
     if (state.remove) { removeItem(win); }
   }
   function closeWinner() {
-    el.overlay.hidden = true; stopConfetti();
+    el.overlay.hidden = true; stopConfetti(); lensOff(card);
     if (lastWinner) { const sl = slices(); const i = sl.findIndex((s) => s.it === lastWinner || (lastWinner.team != null && s.it.team === lastWinner.team)); if (i >= 0) { glow = { idx: i, until: performance.now() + 1400 }; tick(); } }
   }
   el.closeBtn.addEventListener("click", closeWinner);
@@ -656,20 +683,18 @@
   function applyTheme() { if (prefs.theme === "system") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", prefs.theme); }
 
   // ---------- looks: classic (default), or liquid glass (experimental) ----------
-  // In Chromium the glass really bends what is behind it: each pane gets an SVG displacement map of its own size
-  // (red = sideways, blue = up and down, grey in the middle = no bending), so only the rim refracts, like a lens.
+  // What the glass costs is decided here. A filter over something that moves is run again for every frame,
+  // so nothing does that any more:
+  //  - the hub's lens is drawn by the wheel itself (drawLens, in the canvas), not filtered by the browser;
+  //  - panes with only the still background behind them are tinted glass with no filter (glass.css);
+  //  - the one bending lens left is the winner card's (Chromium, not on phones): an SVG displacement map the
+  //    size of the card (red = sideways, blue = up and down, grey in the middle = no bending), put on only
+  //    once the card has stopped moving, and taken off again while you pull it;
+  //  - the highlight that follows the pointer is one soft disc per pane that only slides (no repainting).
   const root = document.documentElement;
-  const canLens = !!(navigator.userAgentData && navigator.userAgentData.brands && navigator.userAgentData.brands.some((b) => b.brand === "Chromium"));
-  const LENSES = [
-    { sel: ".bar", blur: 9, edge: 14, scale: 46, sat: 1.8 },
-    { sel: ".panel", blur: 9, edge: 20, scale: 60, sat: 1.8 },
-    { sel: ".history", blur: 8, edge: 12, scale: 40, sat: 1.8 },
-    { sel: ".winner", blur: 14, edge: 22, scale: 70, sat: 1.9 },
-    { sel: ".hub", blur: 1.2, edge: 16, scale: 54, sat: 1.5, lite: true },
-    { sel: "#spinBtn", blur: 5, edge: 10, scale: 34, sat: 1.8 },
-    { sel: "#shuffleBtn", blur: 5, edge: 10, scale: 34, sat: 1.8 },
-  ];
-  let lensSvg = null, lensRO = null;
+  const canLens = !lite && !!(navigator.userAgentData && navigator.userAgentData.brands && navigator.userAgentData.brands.some((b) => b.brand === "Chromium"));
+  const CARD_LENS = { blur: 14, edge: 22, scale: 70, sat: 1.9 };
+  let glassOn = false, lensSvg = null, lensTimer = 0;
   function lensMap(w, h, r, edge) {
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + " " + h + '">' +
       '<defs><linearGradient id="r" x1="100%" y1="0%" x2="0%" y2="0%"><stop offset="0%" stop-color="#000"/><stop offset="100%" stop-color="#f00"/></linearGradient>' +
@@ -681,34 +706,57 @@
       '<rect x="' + edge + '" y="' + edge + '" width="' + Math.max(1, w - edge * 2) + '" height="' + Math.max(1, h - edge * 2) + '" rx="' + Math.max(0, r - edge) + '" fill="#808080" filter="url(#s)"/></svg>';
     return "data:image/svg+xml," + encodeURIComponent(svg);
   }
-  function setLens(el, cfg, i) {
-    const w = Math.round(el.offsetWidth), h = Math.round(el.offsetHeight); if (!w || !h) return;
-    const key = w + "x" + h; if (el.dataset.lens === key) return; el.dataset.lens = key;
-    const r = Math.min(parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0, w / 2, h / 2), edge = Math.min(cfg.edge, w / 2.2, h / 2.2);
-    let f = lensSvg.querySelector("#lens-" + i);
-    if (!f) { f = document.createElementNS("http://www.w3.org/2000/svg", "filter"); f.id = "lens-" + i; f.setAttribute("color-interpolation-filters", "sRGB"); lensSvg.appendChild(f); }
-    f.setAttribute("x", "0"); f.setAttribute("y", "0"); f.setAttribute("width", w); f.setAttribute("height", h); f.setAttribute("filterUnits", "userSpaceOnUse"); f.setAttribute("primitiveUnits", "userSpaceOnUse");
-    f.innerHTML = '<feImage href="' + lensMap(w, h, r, edge) + '" x="0" y="0" width="' + w + '" height="' + h + '" preserveAspectRatio="none" result="map"/>' +
-      '<feDisplacementMap in="SourceGraphic" in2="map" scale="' + (-cfg.scale) + '" xChannelSelector="R" yChannelSelector="B"/>';
-    el.style.backdropFilter = "url(#lens-" + i + ") blur(" + cfg.blur + "px) saturate(" + cfg.sat + ") brightness(1.05)";
+  function lensOn(elm, cfg) {
+    const w = Math.round(elm.offsetWidth), h = Math.round(elm.offsetHeight); if (!w || !h) return;
+    if (!lensSvg) { lensSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); lensSvg.setAttribute("width", "0"); lensSvg.setAttribute("height", "0"); lensSvg.style.position = "absolute"; lensSvg.setAttribute("aria-hidden", "true"); document.body.appendChild(lensSvg); }
+    let f = lensSvg.querySelector("#lens-card");
+    if (!f) { f = document.createElementNS("http://www.w3.org/2000/svg", "filter"); f.id = "lens-card"; f.setAttribute("color-interpolation-filters", "sRGB"); lensSvg.appendChild(f); }
+    const key = w + "x" + h;
+    if (f.dataset.size !== key) {   // the map is only made again when the card has another size
+      f.dataset.size = key;
+      const r = Math.min(parseFloat(getComputedStyle(elm).borderTopLeftRadius) || 0, w / 2, h / 2), edge = Math.min(cfg.edge, w / 2.2, h / 2.2);
+      f.setAttribute("x", "0"); f.setAttribute("y", "0"); f.setAttribute("width", w); f.setAttribute("height", h); f.setAttribute("filterUnits", "userSpaceOnUse"); f.setAttribute("primitiveUnits", "userSpaceOnUse");
+      f.innerHTML = '<feImage href="' + lensMap(w, h, r, edge) + '" x="0" y="0" width="' + w + '" height="' + h + '" preserveAspectRatio="none" result="map"/>' +
+        '<feDisplacementMap in="SourceGraphic" in2="map" scale="' + (-cfg.scale) + '" xChannelSelector="R" yChannelSelector="B"/>';
+    }
+    elm.style.backdropFilter = "url(#lens-card) blur(" + cfg.blur + "px) saturate(" + cfg.sat + ") brightness(1.05)";
+  }
+  function lensOff(elm) { clearTimeout(lensTimer); if (elm.style.backdropFilter) elm.style.backdropFilter = ""; }
+  // the card gets its lens a moment after it has come to rest (while it pops in or is pulled it has the plain blur)
+  function lensSoon(elm, ms) {
+    clearTimeout(lensTimer);
+    if (!glassOn || !canLens) return;
+    lensTimer = setTimeout(() => { if (glassOn && !el.overlay.hidden && !elm.classList.contains("is-pulled")) lensOn(elm, CARD_LENS); }, ms);
   }
   function applyLook() {
-    const glass = prefs.look === "glass";   // classic is the default; glass is an experiment you switch on
-    if (glass) root.setAttribute("data-look", "glass"); else root.removeAttribute("data-look");
-    el.lookSel.value = glass ? "glass" : "classic";
-    if (lensRO) { lensRO.disconnect(); lensRO = null; }
-    LENSES.forEach((cfg) => { const n = document.querySelector(cfg.sel); if (n) { n.style.backdropFilter = ""; delete n.dataset.lens; } });
-    if (glass && canLens) {
-      if (!lensSvg) { lensSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); lensSvg.setAttribute("width", "0"); lensSvg.setAttribute("height", "0"); lensSvg.style.position = "absolute"; lensSvg.setAttribute("aria-hidden", "true"); document.body.appendChild(lensSvg); }
-      lensRO = new ResizeObserver((entries) => entries.forEach((en) => { const i = LENSES.findIndex((c) => en.target.matches(c.sel)); if (i >= 0) setLens(en.target, LENSES[i], i); }));
-      LENSES.forEach((cfg) => { if (lite && !cfg.lite) return; const n = document.querySelector(cfg.sel); if (n) lensRO.observe(n); });
-    }
+    glassOn = prefs.look === "glass";   // classic is the default; glass is an experiment you switch on
+    if (glassOn) root.setAttribute("data-look", "glass"); else root.removeAttribute("data-look");
+    el.lookSel.value = glassOn ? "glass" : "classic";
+    lensOff(document.querySelector(".winner"));
+    if (glassOn && !el.overlay.hidden) lensSoon(document.querySelector(".winner"), 300);
+    draw();   // the hub's lens is part of the wheel's own drawing
+    if (glassOn && specs.length) specFrame();
     if (typeof placeGlider === "function") requestAnimationFrame(() => placeGlider(false));
   }
   el.lookSel.addEventListener("change", () => { prefs.look = el.lookSel.value; saveJSON(LS.prefs, prefs); applyLook(); });
-  // the highlight on the glass follows the pointer
-  let specRaf = 0;
-  if (!lite) window.addEventListener("pointermove", (e) => { if (specRaf || root.getAttribute("data-look") !== "glass") return; specRaf = requestAnimationFrame(() => { specRaf = 0; root.style.setProperty("--lx", e.clientX + "px"); root.style.setProperty("--ly", e.clientY + "px"); }); }, { passive: true });
+  // The highlight on the glass follows the pointer (mouse and trackpad only). Each pane has a soft disc on a
+  // layer of its own; following the pointer only changes the discs' transforms, which the graphics chip does
+  // without painting anything again. (It used to be four big gradients repainted on every mouse move.)
+  const specs = lite ? [] : [".bar", ".panel", ".history", ".winner"].map((sel) => {
+    const pane = document.querySelector(sel), wrap = document.createElement("span");
+    wrap.className = "spec"; wrap.setAttribute("aria-hidden", "true"); wrap.appendChild(document.createElement("i")); pane.prepend(wrap);
+    return { pane, dot: wrap.firstChild };
+  });
+  let specRaf = 0, specX = Math.round(innerWidth * 0.72), specY = 30;
+  function specFrame() {
+    specRaf = 0; if (!glassOn) return;
+    for (const sp of specs) { const r = sp.pane.getBoundingClientRect(); if (!r.width) continue; sp.dot.style.transform = "translate3d(" + (specX - r.left).toFixed(1) + "px," + (specY - r.top).toFixed(1) + "px,0)"; }
+  }
+  if (specs.length) {
+    const ask = () => { if (!specRaf && glassOn) specRaf = requestAnimationFrame(specFrame); };
+    window.addEventListener("pointermove", (e) => { specX = e.clientX; specY = e.clientY; ask(); }, { passive: true });
+    window.addEventListener("scroll", ask, { passive: true }); window.addEventListener("resize", ask);
+  }
 
   // big mode
   function setBig(on) {
@@ -736,8 +784,11 @@
   }
   // pull the winner card down to dismiss it; it stretches like rubber and springs back if you let go early
   const card = document.querySelector(".winner"); let pull = null;
-  function resetCard() { card.classList.remove("is-pulled"); card.style.transition = ""; card.style.transform = ""; card.style.opacity = ""; card.style.removeProperty("--pull"); }
-  card.addEventListener("pointerdown", (e) => { if (e.target.closest("button")) return; pull = { y: e.clientY, d: 0 }; try { card.setPointerCapture(e.pointerId); } catch (err) {} card.classList.add("is-pulled"); card.style.transition = "none"; });
+  function resetCard() {
+    card.classList.remove("is-pulled"); card.style.transition = ""; card.style.transform = ""; card.style.opacity = ""; card.style.removeProperty("--pull");
+    lensOff(card); lensSoon(card, 700);   // glass: the bending lens comes on once the card has popped in and is still
+  }
+  card.addEventListener("pointerdown", (e) => { if (e.target.closest("button")) return; pull = { y: e.clientY, d: 0 }; try { card.setPointerCapture(e.pointerId); } catch (err) {} card.classList.add("is-pulled"); card.style.transition = "none"; lensOff(card); });
   card.addEventListener("pointermove", (e) => {
     if (!pull) return;
     const d = e.clientY - pull.y; pull.d = d;
@@ -752,7 +803,7 @@
     card.classList.remove("is-pulled"); card.style.setProperty("--pull", "0");
     card.style.transition = "transform var(--t-spring) var(--spring), opacity 200ms ease";
     if (d > 110) { card.style.transition = "transform 200ms var(--ease), opacity 200ms ease"; card.style.transform = "translateY(60vh) scale(.9)"; card.style.opacity = "0"; setTimeout(() => { closeWinner(); resetCard(); }, 190); }
-    else { card.style.transform = ""; card.style.opacity = ""; }
+    else { card.style.transform = ""; card.style.opacity = ""; lensSoon(card, 750); }
   }
   card.addEventListener("pointerup", endPull); card.addEventListener("pointercancel", endPull);
 

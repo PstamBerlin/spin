@@ -97,11 +97,30 @@ async def main():
         await pgl.select_option("#lookSel", "glass"); await pgl.wait_for_timeout(300)
         await pgl.click('[data-tab="options"]'); await pgl.wait_for_timeout(900)
         g = await pgl.evaluate("""(() => { const t=document.querySelector('.tab.is-active'), gl=document.querySelector('.tab-glider'), tabs=document.querySelector('.tabs');
-          return { look: document.documentElement.dataset.look, lens: document.querySelector('.hub').style.backdropFilter.startsWith('url('), filters: document.querySelectorAll('filter[id^=lens]').length,
+          const cs = (s) => getComputedStyle(document.querySelector(s));
+          return { look: document.documentElement.dataset.look, inline: ['.hub','.bar','.panel','.history','#spinBtn'].map(s => document.querySelector(s).style.backdropFilter).join(''),
+                   filters: document.querySelectorAll('filter[id^=lens]').length, panel: cs('.panel').backdropFilter, hub: cs('.hub').backdropFilter, mesh: cs('.mesh').animationName + '/' + cs('.mesh').filter,
+                   specs: document.querySelectorAll('.spec i').length,
                    pill: Math.abs(parseFloat(gl.style.left) - t.offsetLeft) < 1 && Math.abs(parseFloat(gl.style.width) - t.offsetWidth) < 1, pillH: gl.getBoundingClientRect().height,
                    fits: tabs.scrollWidth <= tabs.clientWidth + 1, barR: getComputedStyle(document.querySelector('.bar')).borderTopLeftRadius }; })()""")
         check("glass switches on from Settings", g["look"] == "glass", g["look"])
-        check("hub and panes refract (lens filters attached)", g["lens"] and g["filters"] >= 5, [g["lens"], g["filters"]])
+        # the cheap glass: nothing filters the spinning wheel or a pane that only has the still background behind it
+        check("no lens or blur filter on the hub or the panes", g["inline"] == "" and g["filters"] == 0 and "blur" not in g["panel"] and "url" not in g["panel"] and g["hub"] == "none", [g["inline"], g["filters"], g["panel"], g["hub"]])
+        check("the background is still and not blurred", g["mesh"] == "none/none", g["mesh"])
+        px = "(() => { const c=document.getElementById('wheel'), x=c.getContext('2d'), out=[]; for (let k=0;k<12;k++){ const a=k*Math.PI/6+0.2, d=x.getImageData(Math.round(c.width*(0.5+0.05*Math.cos(a))), Math.round(c.height*(0.5+0.05*Math.sin(a))), 1, 1).data; out.push(d[0]+','+d[1]+','+d[2]); } return out.join(' '); })()"
+        glass_px = await pgl.evaluate(px)
+        await pgl.mouse.move(700, 300); await pgl.wait_for_timeout(120)
+        sp = await pgl.evaluate("(() => { const p=document.querySelector('.panel'), r=p.getBoundingClientRect(), m=new DOMMatrix(getComputedStyle(p.querySelector('.spec i')).transform); return [Math.round(m.e + r.left), Math.round(m.f + r.top)]; })()")
+        check("the highlight slides to the pointer (4 discs, moved by transform)", g["specs"] == 4 and sp == [700, 300], [g["specs"], sp])
+        # the one real lens: the winner card, and only once it has stopped moving
+        await pgl.click("#spinBtn"); await pgl.wait_for_function("!document.getElementById('overlay').hidden", timeout=20000)
+        early = await pgl.evaluate("document.querySelector('.winner').style.backdropFilter")
+        await pgl.wait_for_timeout(1100)
+        late = await pgl.evaluate("document.querySelector('.winner').style.backdropFilter")
+        check("the winner card bends the wheel only after it has settled", early == "" and "#lens-card" in late and late.startswith("url("), [early, late[:30]])
+        await pgl.keyboard.press("Escape"); await pgl.wait_for_timeout(500)
+        off = await pgl.evaluate("document.querySelector('.winner').style.backdropFilter")
+        check("closing the card takes its lens off", off == "", off)
         check("tab thumb is a full glass pill under its tab", g["pill"] and g["pillH"] > 25, [g["pill"], g["pillH"]])
         check("all six tabs fit in the capsule", g["fits"])
         check("bar is a floating capsule", g["barR"] == "999px", g["barR"])
@@ -109,6 +128,8 @@ async def main():
         await pgl.select_option("#lookSel", "classic"); await pgl.wait_for_timeout(300)
         cl = await pgl.evaluate("[document.documentElement.dataset.look || '', document.querySelector('.hub').style.backdropFilter, JSON.parse(localStorage.getItem('spin-prefs-v1')).look]")
         check("classic switches the glass off and is remembered", cl == ["", "", "classic"], cl)
+        classic_px = await pgl.evaluate(px)
+        check("the hub lens is drawn by the wheel in glass only", glass_px != classic_px, [glass_px[:40], classic_px[:40]])
         check("no page errors", not errors, errors)
         await b.close()
     print("\n%d failures" % len(fails)); sys.exit(1 if fails else 0)
