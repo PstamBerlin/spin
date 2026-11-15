@@ -107,7 +107,7 @@ async def main():
         # the cheap glass: nothing filters the spinning wheel or a pane that only has the still background behind it
         check("no lens or blur filter on the hub or the panes", g["inline"] == "" and g["filters"] == 0 and "blur" not in g["panel"] and "url" not in g["panel"] and g["hub"] == "none", [g["inline"], g["filters"], g["panel"], g["hub"]])
         check("the background is still and not blurred", g["mesh"] == "none/none", g["mesh"])
-        px = "(() => { const c=document.getElementById('wheel'), x=c.getContext('2d'), out=[]; for (let k=0;k<12;k++){ const a=k*Math.PI/6+0.2, d=x.getImageData(Math.round(c.width*(0.5+0.05*Math.cos(a))), Math.round(c.height*(0.5+0.05*Math.sin(a))), 1, 1).data; out.push(d[0]+','+d[1]+','+d[2]); } return out.join(' '); })()"
+        px = "(() => { const c=document.querySelector('#spinHub .lens canvas'); if (!c || getComputedStyle(c.parentNode).display === 'none') return 'no lens'; const x=c.getContext('2d'), out=[]; for (let k=0;k<12;k++){ const a=k*Math.PI/6+0.2, d=x.getImageData(Math.round(c.width*(0.5+0.3*Math.cos(a))), Math.round(c.height*(0.5+0.3*Math.sin(a))), 1, 1).data; out.push(d[0]+','+d[1]+','+d[2]+','+d[3]); } return out.join(' '); })()"
         glass_px = await pgl.evaluate(px)
         await pgl.mouse.move(700, 300); await pgl.wait_for_timeout(120)
         sp = await pgl.evaluate("(() => { const p=document.querySelector('.panel'), r=p.getBoundingClientRect(), m=new DOMMatrix(getComputedStyle(p.querySelector('.spec i')).transform); return [Math.round(m.e + r.left), Math.round(m.f + r.top)]; })()")
@@ -129,7 +129,7 @@ async def main():
         cl = await pgl.evaluate("[document.documentElement.dataset.look || '', document.querySelector('.hub').style.backdropFilter, JSON.parse(localStorage.getItem('spin-prefs-v1')).look]")
         check("classic switches the glass off and is remembered", cl == ["", "", "classic"], cl)
         classic_px = await pgl.evaluate(px)
-        check("the hub lens is drawn by the wheel in glass only", glass_px != classic_px, [glass_px[:40], classic_px[:40]])
+        check("the hub paints its own lens in glass only", glass_px != "no lens" and ",255" in glass_px and len(set(glass_px.split())) > 2 and classic_px == "no lens", [glass_px[:44], classic_px[:40]])
         check("no page errors", not errors, errors)
         await b.close()
     print("\n%d failures" % len(fails)); sys.exit(1 if fails else 0)

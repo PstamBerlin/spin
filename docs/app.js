@@ -157,7 +157,7 @@
 
   // ---------- wheel ----------
   const ctx2d = el.canvas.getContext("2d");
-  let angle = 0, vel = 0, spinning = false, lastT = 0, lastIdx = -1, flex = 0, flexDir = 1, size = 0, dpr = 1;
+  let angle = 0, vel = 0, spinning = false, lastT = 0, lastIdx = -1, flex = 0, flexDir = 1, size = 0, dpr = 1, layoutNo = 0;
   let drag = null;   // {a0, angle0, samples:[{t,a}]}
   let raf = 0;
   let revealed = false;                 // hidden-labels mode: labels show only after a spin has stopped
@@ -213,7 +213,7 @@
   function resize() {
     const r = el.wrap.getBoundingClientRect();
     dpr = Math.min(lite ? 2 : 2.5, window.devicePixelRatio || 1);
-    fitCache.clear(); hiGrad = null;
+    fitCache.clear(); hiGrad = null; layoutNo++;
     size = Math.max(200, Math.floor(r.width));
     el.canvas.width = Math.floor(size * dpr); el.canvas.height = Math.floor(size * dpr);
     draw();
@@ -241,19 +241,7 @@
       x.fillStyle = PALETTE[s.it.c % PALETTE.length]; x.fill();
       if (glowing && i !== glowing.idx) { x.fillStyle = "rgba(42,24,56,.42)"; x.fill(); }
       x.lineWidth = n > 1 ? Math.max(1.5, c * 0.006) : 0; x.strokeStyle = "rgba(42,24,56,.85)"; if (n > 1) x.stroke();
-      // label
-      const span = s.end - s.start;
-      if (span < 0.06) continue;   // too thin for a label while it grows
-      const label = showLabels ? s.it.t.trim() : "?";
-      // labels always read left to right on screen: slices on the left half are drawn flipped
-      const flip = Math.cos(s.mid + angle) < 0;
-      x.save(); x.rotate(s.mid + (flip ? Math.PI : 0));
-      const maxW = R * 0.66;
-      const fs = label === "?" ? c * 0.16 : Math.max(10, Math.min(c * 0.11, span * R * 0.42, (maxW * 1.5) / Math.max(3, label.length)));
-      x.font = `800 ${fs}px Manrope, system-ui, sans-serif`; x.textBaseline = "middle"; x.fillStyle = PLUM;
-      const txt = fit(x, label, maxW);
-      if (flip) { x.textAlign = "left"; x.fillText(txt, -R * 0.9, 0); } else { x.textAlign = "right"; x.fillText(txt, R * 0.9, 0); }
-      x.restore();
+      drawLabel(x, s, R, c, showLabels);
     }
     if (glowing) {
       const s = sl[glowing.idx], k = ((glowing.until - performance.now()) / 1400); const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 110);
@@ -264,7 +252,6 @@
     if (n > 1) for (const s of sl) { x.beginPath(); x.arc(Math.cos(s.start) * (R + c * 0.02), Math.sin(s.start) * (R + c * 0.02), c * 0.012, 0, TAU); x.fillStyle = "rgba(255,255,255,.75)"; x.fill(); }
     // glass highlight (frost)
     x.rotate(-angle);
-    if (glassOn && n > 0) drawLens(x, sl);
     if (!hiGrad || hiGrad.R !== R) {
       const g = x.createRadialGradient(-R * 0.4, -R * 0.5, 0, 0, 0, R * 1.1);
       g.addColorStop(0, "rgba(255,255,255,.2)"); g.addColorStop(0.5, "rgba(255,255,255,.03)"); g.addColorStop(1, "rgba(255,255,255,0)");
@@ -272,6 +259,7 @@
     }
     x.beginPath(); x.arc(0, 0, R, 0, TAU); x.fillStyle = hiGrad.g; x.fill();
     x.restore();
+    if (glassOn) hubLens(sl, R, c, showLabels, glowing);
     // pointer with flex
     x.save(); x.translate(c, c * 0.045);
     x.rotate(flex * 0.35 * flexDir);
@@ -289,34 +277,157 @@
   // each slice edge is a curve that can be drawn directly. The filter was run again for every frame of a spin;
   // this is a few small fills, in every browser. (x is centred on the wheel and not rotated: the lens stands
   // still while the wheel turns under it.)
-  // The lens is drawn small on a canvas of its own and laid over the hub enlarged, which gives it the soft,
-  // slightly out-of-focus edges real glass has (the filter had a small blur for that) at no cost.
-  let lensCv = null, lensX = null;
-  function drawLens(x, sl) {
-    const hr = size * 0.095, K = 10, LS = 0.62;            // the hub button is 19% of the wheel across
-    const d = Math.max(8, Math.ceil(hr * 2 * LS));
-    if (!lensCv) { lensCv = document.createElement("canvas"); lensX = lensCv.getContext("2d"); }
-    if (lensCv.width !== d) { lensCv.width = d; lensCv.height = d; }
-    const g = lensX, k = Math.min(0.8, 25 / hr);           // about as strong as the old filter was
-    const at = (q, i) => {                                  // where the wheel's angle q shows at ring i of the lens
-      const t = i / K, u = Math.max(0, (t - 0.38) / 0.62), b = k * u * u * (3 - 2 * u), sq = Math.sin(q), cq = Math.cos(q);   // no bend in the middle, all of it towards the rim
-      const f = q + Math.atan2(sq * (1 + b), cq * (1 - b)) - Math.atan2(sq, cq);
-      return [Math.cos(f) * hr * t, Math.sin(f) * hr * t, f];
-    };
-    g.setTransform(LS, 0, 0, LS, d / 2, d / 2); g.lineJoin = "round";
-    g.lineWidth = sl.length > 1 ? 1.4 : 0; g.strokeStyle = "rgba(42,24,56,.26)";   // the wheel's dark lines, seen through the glass
-    for (const s of sl) {
-      const q0 = s.start + angle, q1 = s.end + angle;
-      g.beginPath(); g.moveTo(0, 0);
-      let p; for (let i = 1; i <= K; i++) { p = at(q0, i); g.lineTo(p[0], p[1]); }
-      g.arc(0, 0, hr * 1.1, p[2], at(q1, K)[2]);
-      for (let i = K - 1; i >= 1; i--) { p = at(q1, i); g.lineTo(p[0], p[1]); }
-      g.closePath(); g.fillStyle = PALETTE[s.it.c % PALETTE.length]; g.fill(); if (sl.length > 1) g.stroke();
-    }
-    x.save(); x.beginPath(); x.arc(0, 0, hr, 0, TAU); x.clip();
-    x.imageSmoothingEnabled = true; x.imageSmoothingQuality = "high";
-    x.drawImage(lensCv, -hr, -hr, hr * 2, hr * 2);
+  function drawLabel(x, s, R, c, showLabels) {
+    const span = s.end - s.start;
+    if (span < 0.06) return;   // too thin for a label while it grows
+    const label = showLabels ? s.it.t.trim() : "?";
+    // labels always read left to right on screen: slices on the left half are drawn flipped
+    const flip = Math.cos(s.mid + angle) < 0;
+    x.save(); x.rotate(s.mid + (flip ? Math.PI : 0));
+    const maxW = R * 0.66;
+    const fs = label === "?" ? c * 0.16 : Math.max(10, Math.min(c * 0.11, span * R * 0.42, (maxW * 1.5) / Math.max(3, label.length)));
+    x.font = `800 ${fs}px Manrope, system-ui, sans-serif`; x.textBaseline = "middle"; x.fillStyle = PLUM;
+    const txt = fit(x, label, maxW);
+    if (flip) { x.textAlign = "left"; x.fillText(txt, -R * 0.9, 0); } else { x.textAlign = "right"; x.fillText(txt, R * 0.9, 0); }
     x.restore();
+  }
+
+  // ---------- the hub's lens (liquid glass look) ----------
+  // The hub used to bend the wheel with a browser filter (an SVG displacement map, then a small blur, more
+  // colour and a little more light). That is the look to keep, but the browser ran the filter again for every
+  // frame of a spin. So the hub now does the very same sums itself, on a small canvas of its own inside the
+  // button, in the filter's own order:
+  //  1. the wheel under the hub is painted once more, small, on a canvas that is cheap to read back
+  //     (slices, lines, the few labels that can show, the wheel's highlight);
+  //  2. for every pixel of the hub it looks up which spot of that wheel the filter would have shown there.
+  //     The map is the filter's map: red runs across, blue runs down, and a blurred grey patch in the middle
+  //     switches the bend off there (HUB_LENS has the old numbers);
+  //  3. a small blur (three quick box blurs, which add up to the filter's Gaussian one);
+  //  4. the filter's saturate(1.5) and brightness(1.05), and the hub's own 13% white.
+  // The table for step 2 is only made again when the hub changes size. The lens is blurred, so it is worked out
+  // at most 1.25 pixels to the CSS pixel and the browser enlarges it: on a sharp screen that looks the same
+  // (checked against the filter) and is a third of the work.
+  const HUB_LENS = { edge: 16, scale: 54, blur: 1.2, light: 1.05, white: 0.13, res: 1.25 };
+  let lens = null, lensEl = null;
+  function lensSetup() {
+    const res = Math.min(dpr, HUB_LENS.res);
+    if (lens && lens.res === res && lens.no === layoutNo) return lens;   // (asking the hub its size every frame would make the browser lay the page out every frame)
+    const w = Math.round(el.hub.offsetWidth); if (!w) return null;
+    if (!lensEl) {
+      lensEl = document.createElement("span"); lensEl.className = "lens"; lensEl.setAttribute("aria-hidden", "true");
+      lensEl.appendChild(document.createElement("canvas")); el.hub.prepend(lensEl);
+    }
+    const hr = w / 2, S = HUB_LENS.scale, d = Math.round(w * res);
+    const sc = el.wrap.getBoundingClientRect().width / size || 1;
+    // the filter's map was a whole number of pixels wide and started at the hub's corner, so its middle sat a fraction off the wheel's middle
+    const slip = (w - (parseFloat(getComputedStyle(el.hub).width) || w)) / 2;
+    // the grey patch: the filter's rounded rectangle, blurred, here as the soft shadow of a shape drawn off-canvas
+    const r = Math.min(50, hr), edge = Math.min(HUB_LENS.edge, w / 2.2), sigma = +(edge * 0.45).toFixed(1), ms = 2, md = Math.ceil(w * ms), far = md * 3;
+    const mc = document.createElement("canvas"); mc.width = md; mc.height = md; const mg = mc.getContext("2d");
+    mg.shadowColor = "#000"; mg.shadowBlur = sigma * 2 * ms; mg.shadowOffsetX = far; mg.fillStyle = "#000";
+    mg.setTransform(ms, 0, 0, ms, -far, 0);
+    const rw = Math.max(1, w - edge * 2), rr = Math.min(Math.max(0, r - edge), rw / 2);
+    mg.beginPath(); mg.moveTo(edge + rr, edge); mg.arcTo(edge + rw, edge, edge + rw, edge + rw, rr); mg.arcTo(edge + rw, edge + rw, edge, edge + rw, rr); mg.arcTo(edge, edge + rw, edge, edge, rr); mg.arcTo(edge, edge, edge + rw, edge, rr); mg.closePath(); mg.fill();
+    const grey = mg.getImageData(0, 0, md, md).data;
+    // where each pixel of the hub looks (in CSS pixels from the hub's middle), and the strip of wheel that takes
+    const xs = new Float32Array(d * d), ys = new Float32Array(d * d), reach = (hr + 4) * (hr + 4); let x0 = 0, x1 = 0, y0 = 0, y1 = 0;
+    for (let j = 0; j < d; j++) for (let i = 0; i < d; i++) {
+      const u = (i + 0.5) / res - hr, v = (j + 0.5) / res - hr;
+      const mi = Math.min(md - 1, Math.max(0, Math.floor((u + hr) * ms))), mj = Math.min(md - 1, Math.max(0, Math.floor((v + hr) * ms)));
+      const al = grey[(mj * md + mi) * 4 + 3] / 255;
+      let red = 0.5 - u / w, blue = 0.5 + v / w;
+      if (r < hr) { const qx = Math.abs(u) - (hr - r), qy = Math.abs(v) - (hr - r); if (qx > 0 && qy > 0 && qx * qx + qy * qy > r * r) { red = 0; blue = 0; } }   // a big hub: the map's corners are cut
+      red += (128 / 255 - red) * al; blue += (128 / 255 - blue) * al;
+      const p = j * d + i, x = u - S * (red - 0.5), y = v - S * (blue - 0.5);     // feDisplacementMap, scale -54
+      xs[p] = x; ys[p] = y;
+      if (u * u + v * v <= reach) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }   // the corners outside the round hub are never seen
+    }
+    x0 -= 2; y0 -= 2; x1 += 2; y1 += 2;
+    const sw = Math.ceil((x1 - x0) * res), sh = Math.ceil((y1 - y0) * res);
+    const idx = new Int32Array(d * d), fx = new Float32Array(d * d), fy = new Float32Array(d * d);
+    for (let p = 0; p < d * d; p++) {
+      const px = (xs[p] - x0) * res - 0.5, py = (ys[p] - y0) * res - 0.5;
+      const si = Math.min(sw - 2, Math.max(0, Math.floor(px))), sj = Math.min(sh - 2, Math.max(0, Math.floor(py)));
+      idx[p] = (sj * sw + si) * 4; fx[p] = Math.min(1, Math.max(0, px - si)); fy[p] = Math.min(1, Math.max(0, py - sj));
+    }
+    // three box blurs that together make a Gaussian blur of the filter's width
+    const sg = HUB_LENS.blur * res, ideal = Math.sqrt(12 * sg * sg / 3 + 1); let wl = Math.floor(ideal); if (wl % 2 === 0) wl--;
+    const mIdeal = Math.round((12 * sg * sg - 3 * wl * wl - 12 * wl - 9) / (-4 * wl - 4)), boxes = [0, 1, 2].map((q) => ((q < mIdeal ? wl : wl + 2) - 1) / 2);
+    const srcCv = document.createElement("canvas"); srcCv.width = sw; srcCv.height = sh;
+    const hubCv = lensEl.firstChild; hubCv.width = d; hubCv.height = d; const hubX = hubCv.getContext("2d");
+    const P = boxes[0] + boxes[1] + boxes[2], dw = d + P * 2;      // the work buffers have a margin as wide as the blur reaches, so the blur never has to check for an edge
+    lens = { w, res, no: layoutNo, tx: (-x0 - slip) * res, ty: (-y0 - slip) * res, x0, y0, x1, y1, sc, d, sw, sh, idx, fx, fy, boxes, P, dw, srcX: srcCv.getContext("2d", { willReadFrequently: true }),
+             a: new Float32Array(dw * dw * 3), b: new Float32Array(dw * dw * 3), acc: new Float32Array(dw * 3), out: hubX.createImageData(d, d), hubX, hi: null };
+    return lens;
+  }
+  // One box blur, across then down, of the part of the buffer between lo and hi (in pixels, the same for rows
+  // and columns). It is two running sums, so the work per pixel does not grow with the width of the blur.
+  function lensBox(a, b, acc, dw, lo, hi, r) {
+    const inv = 1 / (r + r + 1), row = dw * 3, back = r * 3, fwd = (r + 1) * 3;
+    for (let y = lo; y < hi; y++) {                          // across: a -> b, columns lo+r .. hi-r-1
+      let q = y * row + lo * 3, s0 = 0, s1 = 0, s2 = 0;
+      for (let k = 0; k <= r + r; k++, q += 3) { s0 += a[q]; s1 += a[q + 1]; s2 += a[q + 2]; }
+      q = y * row + (lo + r) * 3;
+      const last = y * row + (hi - r - 1) * 3;
+      for (; q < last; q += 3) {
+        b[q] = s0 * inv; b[q + 1] = s1 * inv; b[q + 2] = s2 * inv;
+        s0 += a[q + fwd] - a[q - back]; s1 += a[q + fwd + 1] - a[q - back + 1]; s2 += a[q + fwd + 2] - a[q - back + 2];
+      }
+      b[q] = s0 * inv; b[q + 1] = s1 * inv; b[q + 2] = s2 * inv;
+    }
+    const c0 = (lo + r) * 3, c1 = (hi - r) * 3;              // down: b -> a, rows lo+r .. hi-r-1, one running sum per column
+    for (let c = c0; c < c1; c++) acc[c] = 0;
+    for (let y = lo; y <= lo + r + r; y++) { const q = y * row; for (let c = c0; c < c1; c++) acc[c] += b[q + c]; }
+    for (let y = lo + r; y < hi - r; y++) {
+      const q = y * row, up = (y - r) * row, dn = (y + r + 1) * row, more = y < hi - r - 1;
+      for (let c = c0; c < c1; c++) { a[q + c] = acc[c] * inv; if (more) acc[c] += b[dn + c] - b[up + c]; }
+    }
+  }
+  function hubLens(sl, R, c, showLabels, glowing) {
+    const L = lensSetup(); if (!L) return;
+    const n = sl.length, d = L.d;
+    if (!n) { L.hubX.clearRect(0, 0, d, d); return; }
+    // 1. the wheel around the hub, painted again small
+    const g = L.srcX; g.setTransform(L.res * L.sc, 0, 0, L.res * L.sc, L.tx, L.ty);
+    g.save(); g.rotate(angle);
+    const lw = n > 1 ? Math.max(1.5, c * 0.006) : 0;
+    for (let i = 0; i < n; i++) {
+      const s = sl[i];
+      g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, R, s.start, s.end); g.closePath();
+      g.fillStyle = PALETTE[s.it.c % PALETTE.length]; g.fill();
+      if (glowing && i !== glowing.idx) { g.fillStyle = "rgba(42,24,56,.42)"; g.fill(); }
+      if (n > 1) { g.lineWidth = lw; g.strokeStyle = "rgba(42,24,56,.85)"; g.stroke(); }
+      if (Math.abs(Math.sin(s.mid + angle)) < 0.5) drawLabel(g, s, R, c, showLabels);   // only a label lying almost level can reach into the lens
+    }
+    g.restore();
+    if (!L.hi || L.hi.R !== R) { const q = g.createRadialGradient(-R * 0.4, -R * 0.5, 0, 0, 0, R * 1.1); q.addColorStop(0, "rgba(255,255,255,.2)"); q.addColorStop(0.5, "rgba(255,255,255,.03)"); q.addColorStop(1, "rgba(255,255,255,0)"); L.hi = { R, q }; }
+    g.fillStyle = L.hi.q; g.fillRect(L.x0 - 4, L.y0 - 4, L.x1 - L.x0 + 8, L.y1 - L.y0 + 8);
+    // 2. every pixel through the map
+    const src = g.getImageData(0, 0, L.sw, L.sh).data, idx = L.idx, fx = L.fx, fy = L.fy, a = L.a, b = L.b, row = L.sw * 4, P = L.P, dw = L.dw, wrow = dw * 3;
+    for (let j = 0, p = 0; j < d; j++) {
+      let o = ((j + P) * dw + P) * 3;
+      for (let i = 0; i < d; i++, p++, o += 3) {
+        const k = idx[p], x1 = fx[p], y1 = fy[p], w00 = (1 - x1) * (1 - y1), w10 = x1 * (1 - y1), w01 = (1 - x1) * y1, w11 = x1 * y1;
+        a[o] = src[k] * w00 + src[k + 4] * w10 + src[k + row] * w01 + src[k + row + 4] * w11;
+        a[o + 1] = src[k + 1] * w00 + src[k + 5] * w10 + src[k + row + 1] * w01 + src[k + row + 5] * w11;
+        a[o + 2] = src[k + 2] * w00 + src[k + 6] * w10 + src[k + row + 2] * w01 + src[k + row + 6] * w11;
+      }
+      const first = ((j + P) * dw + P) * 3, last = first + (d - 1) * 3;   // the margin repeats the edge pixel
+      for (let m = 1; m <= P; m++) { a[first - m * 3] = a[first]; a[first - m * 3 + 1] = a[first + 1]; a[first - m * 3 + 2] = a[first + 2]; a[last + m * 3] = a[last]; a[last + m * 3 + 1] = a[last + 1]; a[last + m * 3 + 2] = a[last + 2]; }
+    }
+    for (let m = 0; m < P; m++) { a.copyWithin(m * wrow, P * wrow, (P + 1) * wrow); a.copyWithin((P + d + m) * wrow, (P + d - 1) * wrow, (P + d) * wrow); }
+    // 3. the small blur
+    let lo = 0, hi = dw;
+    for (const r of L.boxes) if (r > 0) { lensBox(a, b, L.acc, dw, lo, hi, r); lo += r; hi -= r; }
+    // 4. colour and light, then onto the hub
+    const out = L.out.data, lt = HUB_LENS.light, wh = HUB_LENS.white;
+    for (let j = 0, q = 0; j < d; j++) for (let i = 0, o = ((j + P) * dw + P) * 3; i < d; i++, o += 3, q += 4) {
+      const r = a[o], gr = a[o + 1], bl = a[o + 2];
+      let r2 = (1.3935 * r - 0.3575 * gr - 0.036 * bl) * lt, g2 = (-0.1065 * r + 1.1425 * gr - 0.036 * bl) * lt, b2 = (-0.1065 * r - 0.3575 * gr + 1.464 * bl) * lt;   // saturate(1.5), brightness(1.05)
+      r2 = r2 < 0 ? 0 : r2 > 255 ? 255 : r2; g2 = g2 < 0 ? 0 : g2 > 255 ? 255 : g2; b2 = b2 < 0 ? 0 : b2 > 255 ? 255 : b2;
+      out[q] = r2 + (255 - r2) * wh; out[q + 1] = g2 + (255 - g2) * wh; out[q + 2] = b2 + (255 - b2) * wh; out[q + 3] = 255;
+    }
+    L.hubX.putImageData(L.out, 0, 0);
   }
   function fit(x, text, maxW) {
     const key = x.font + "|" + Math.round(maxW) + "|" + text; const hit = fitCache.get(key); if (hit !== undefined) return hit;
@@ -696,7 +807,7 @@
   // ---------- looks: classic (default), or liquid glass (experimental) ----------
   // What the glass costs is decided here. A filter over something that moves is run again for every frame,
   // so nothing does that any more:
-  //  - the hub's lens is drawn by the wheel itself (drawLens, in the canvas), not filtered by the browser;
+  //  - the hub's lens is worked out by the page itself on a small canvas inside the hub (hubLens), not filtered by the browser;
   //  - panes with only the still background behind them are tinted glass with no filter (glass.css);
   //  - the one bending lens left is the winner card's (Chromium, not on phones): an SVG displacement map the
   //    size of the card (red = sideways, blue = up and down, grey in the middle = no bending), put on only
