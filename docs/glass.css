@@ -116,3 +116,25 @@
 :root[data-look="glass"] .winner-text{background:none;-webkit-background-clip:border-box;background-clip:border-box;color:var(--ink);text-shadow:0 2px 16px rgba(255,255,255,.55)}
 :root[data-look="glass"][data-theme="dark"] .winner-text{text-shadow:0 2px 16px rgba(27,15,36,.7)}
 @media (prefers-color-scheme: dark){:root[data-look="glass"]:not([data-theme="light"]) .winner-text{text-shadow:0 2px 16px rgba(27,15,36,.7)}}
+
+/* ---- Apple-style glass bubble on the tab thumb and the choice thumb ----
+   A clear bubble instead of a frosted pill: a white wash that is brighter at the top, a thin bright rim with a
+   glint on the top-left and bottom-right edges, a soft shadow, and a little taller so it pops out of its
+   track. No backdrop filter, because the bubble moves. The pull and stretch stay as they were. */
+:root[data-look="glass"] .tab-glider{top:1px;bottom:1px}
+:root[data-look="glass"] .seg::before{top:2px;bottom:2px}
+:root[data-look="glass"] .tab-glider,:root[data-look="glass"] .seg::before{
+  background:radial-gradient(120% 160% at 28% -20%,rgba(255,255,255,.78),rgba(255,255,255,.34) 48%,rgba(255,255,255,.22) 70%,rgba(255,255,255,.42) 100%);
+  border-color:transparent;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.7),inset 1.5px 2px 1.5px -1px #fff,inset -1.5px -2px 1.5px -1px rgba(255,255,255,.85),
+    0 8px 18px -6px rgba(42,24,56,.32),0 0 0 .5px rgba(42,24,56,.12)}
+:root[data-look="glass"][data-theme="dark"] .tab-glider,:root[data-look="glass"][data-theme="dark"] .seg::before{
+  background:radial-gradient(120% 160% at 28% -20%,rgba(255,255,255,.30),rgba(255,255,255,.09) 48%,rgba(255,255,255,.04) 70%,rgba(255,255,255,.13) 100%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.3),inset 1.5px 2px 1.5px -1px rgba(255,255,255,.9),inset -1.5px -2px 1.5px -1px rgba(255,255,255,.45),
+    0 8px 18px -6px rgba(0,0,0,.6),0 0 0 .5px rgba(0,0,0,.3)}
+@media (prefers-color-scheme: dark){
+  :root[data-look="glass"]:not([data-theme="light"]) .tab-glider,:root[data-look="glass"]:not([data-theme="light"]) .seg::before{
+    background:radial-gradient(120% 160% at 28% -20%,rgba(255,255,255,.30),rgba(255,255,255,.09) 48%,rgba(255,255,255,.04) 70%,rgba(255,255,255,.13) 100%);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.3),inset 1.5px 2px 1.5px -1px rgba(255,255,255,.9),inset -1.5px -2px 1.5px -1px rgba(255,255,255,.45),
+      0 8px 18px -6px rgba(0,0,0,.6),0 0 0 .5px rgba(0,0,0,.3)}
+}
