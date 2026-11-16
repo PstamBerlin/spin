@@ -4,6 +4,31 @@
 
   const PALETTE = ["#FF3B5C", "#FF8A1F", "#FFD400", "#1DE9A6", "#2E9BFF", "#9B5CFF", "#FF4FB0", "#5CE840"];
   const PLUM = "#2A1838";
+  // colour sets for the slices (Settings, How the wheel looks). "custom" keeps its own eight in the wheel.
+  const PALS = {
+    spin: PALETTE,
+    pastel: ["#FFADAD", "#FFD6A5", "#FDFFB6", "#CAFFBF", "#9BF6FF", "#A0C4FF", "#BDB2FF", "#FFC6FF"],
+    ocean: ["#03045E", "#0077B6", "#00B4D8", "#90E0EF", "#48CAE4", "#0096C7", "#023E8A", "#CAF0F8"],
+    sunset: ["#FF5E5B", "#FF9F1C", "#FFBF69", "#F4845F", "#E85D75", "#F7B267", "#C9184A", "#FFD6A5"],
+    forest: ["#2D6A4F", "#40916C", "#52B788", "#74C69D", "#95D5B2", "#1B4332", "#B7E4C7", "#D8F3DC"],
+    neon: ["#FF00A0", "#00F0FF", "#FFE600", "#7CFF00", "#FF6B00", "#B400FF", "#00FF9C", "#FF2E2E"],
+    greys: ["#F2F2F2", "#CFCFCF", "#A8A8A8", "#7F7F7F", "#5C5C5C", "#3D3D3D", "#E0E0E0", "#262626"],
+  };
+  const hex6 = (v) => (/^#[0-9a-f]{6}$/i.test(String(v || "")) ? String(v).toLowerCase() : "");
+  // the wheel's looks and what happens around a spin: they travel in the link, so a shared wheel looks and behaves the same
+  const LOOKS = { secs: 5, idle: false, showTitle: true, msg: "", confetti: true, glow: true, removeBtn: true, popSound: false, autoClose: false, pal: "spin", cols: null, off: 0, outline: false, shadow: true, page: "", mesh: true };
+  function normLooks(s) {
+    s = s || {};
+    const pal = PALS[s.pal] || s.pal === "custom" ? s.pal : "spin";
+    const cols = pal === "custom" ? (Array.isArray(s.cols) && s.cols.length === 8 ? s.cols.map((h) => hex6(h) || "#888888") : PALETTE.map((h) => h.toLowerCase())) : null;
+    let off = clampInt(s.off, 0, 255, 0); let on = 0; for (let i = 0; i < 8; i++) if (!(off & (1 << i))) on++; if (on < 2) off = 0;
+    const b = (v, d) => (v == null ? d : !!v);
+    return { secs: clampInt(s.secs, 2, 30, 5), idle: b(s.idle, false), showTitle: b(s.showTitle, true), msg: String(s.msg || "").slice(0, 40), confetti: b(s.confetti, true), glow: b(s.glow, true),
+      removeBtn: b(s.removeBtn, true), popSound: b(s.popSound, false), autoClose: b(s.autoClose, false), pal, cols, off, outline: b(s.outline, false), shadow: b(s.shadow, true), page: hex6(s.page), mesh: b(s.mesh, true) };
+  }
+  function pal() { const base = state.pal === "custom" && state.cols ? state.cols : PALS[state.pal] || PALETTE; const on = base.filter((_, i) => !(state.off & (1 << i))); return on.length >= 2 ? on : base; }
+  function col(c) { const p = pal(); return p[((c % p.length) + p.length) % p.length]; }
+  function lum(h) { const v = parseInt(h.slice(1), 16), f = (x) => { x /= 255; return x <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); }; return 0.2126 * f(v >> 16) + 0.7152 * f((v >> 8) & 255) + 0.0722 * f(v & 255); }
   const TAU = Math.PI * 2;
   const POINTER = -Math.PI / 2;          // the pointer sits at the top
   const MAX_ITEMS = 60;
@@ -40,7 +65,7 @@
 
   let state = fresh();
   function fresh() {
-    return { title: "", items: PRESETS[4].items.map((t, i) => ({ t, c: i % PALETTE.length, w: 1 })), hidden: false, remove: false, sound: "classic", mode: "wheel", teams: freshTeams() };
+    return Object.assign({ title: "", items: PRESETS[4].items.map((t, i) => ({ t, c: i % PALETTE.length, w: 1 })), hidden: false, remove: false, sound: "classic", mode: "wheel", teams: freshTeams() }, normLooks(LOOKS));
   }
   function freshTeams() { return { names: [], count: 2, labels: [], assigned: [], all: false }; }
   let popFrom = -1;   // names placed in a cascade get a pop animation
@@ -58,6 +83,7 @@
   }
   function nextNameIndex() { return state.teams.assigned.findIndex((t) => t < 0); }
   let prefs = loadJSON(LS.prefs, { muted: false, theme: "system" });
+  if (typeof prefs.volume !== "number") prefs.volume = 1;   // device only: volume, and the pictures (too big for a link)
   let history = [];
   let dirtyUrl = false;
 
@@ -65,6 +91,11 @@
   function encodeState(s) {
     const compact = { t: s.title || "", i: s.items.map((it) => [it.t, it.c, it.w]), h: s.hidden ? 1 : 0, r: s.remove ? 1 : 0, s: s.sound };
     if (s.mode === "teams") compact.m = "t";
+    // looks: only what differs from the defaults, so plain links stay short
+    if (s.secs !== 5) compact.d = s.secs; if (s.idle) compact.z = 1; if (!s.showTitle) compact.v = 0; if (s.msg) compact.k = s.msg;
+    if (!s.confetti) compact.f = 0; if (!s.glow) compact.y = 0; if (!s.removeBtn) compact.b = 0; if (s.popSound) compact.p = 1; if (s.autoClose) compact.a = 1;
+    if (s.pal !== "spin") compact.P = s.pal; if (s.pal === "custom" && s.cols) compact.C = s.cols.map((h) => h.slice(1)).join(""); if (s.off) compact.O = s.off;
+    if (s.outline) compact.o = 1; if (!s.shadow) compact.S = 0; if (s.page) compact.B = s.page.slice(1); if (!s.mesh) compact.G = 0;
     if (s.teams && s.teams.names.length) compact.g = { n: s.teams.names, c: s.teams.count, l: s.teams.labels, a: s.teams.assigned, x: s.teams.all ? 1 : 0 };
     const json = JSON.stringify(compact);
     const bytes = new TextEncoder().encode(json);
@@ -91,7 +122,9 @@
         teams.assigned = teams.names.map((_, i) => clampInt(Array.isArray(c.g.a) ? c.g.a[i] : -1, -1, teams.count - 1, -1));
         teams.all = !!c.g.x;
       }
-      return { title: String(c.t || "").slice(0, 48), items, hidden: !!c.h, remove: !!c.r, sound: ["classic", "drums", "chime"].includes(c.s) ? c.s : "classic", mode: c.m === "t" ? "teams" : "wheel", teams };
+      const looks = normLooks({ secs: c.d, idle: c.z, showTitle: c.v, msg: c.k, confetti: c.f, glow: c.y, removeBtn: c.b, popSound: c.p, autoClose: c.a, pal: c.P,
+        cols: typeof c.C === "string" ? (c.C.match(/[0-9a-fA-F]{6}/g) || []).map((h) => "#" + h) : null, off: c.O, outline: c.o, shadow: c.S, page: c.B ? "#" + c.B : "", mesh: c.G });
+      return Object.assign({ title: String(c.t || "").slice(0, 48), items, hidden: !!c.h, remove: !!c.r, sound: ["classic", "drums", "chime"].includes(c.s) ? c.s : "classic", mode: c.m === "t" ? "teams" : "wheel", teams }, looks);
     } catch (e) { return null; }
   }
   function clampInt(v, lo, hi, dflt) { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : dflt; }
@@ -113,6 +146,8 @@
     if (prefs.muted) return null;
     if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } }
     if (ac.state === "suspended") ac.resume();
+    if (!ac.master) { ac.master = ac.createGain(); ac.master.connect(ac.destination); }
+    ac.master.gain.value = prefs.volume;
     return ac;
   }
   function tone(ctx, { f = 440, type = "sine", t = 0, dur = 0.2, gain = 0.2, slideTo = null }) {
@@ -122,7 +157,7 @@
     g.gain.setValueAtTime(0.0001, ctx.currentTime + t);
     g.gain.exponentialRampToValueAtTime(gain, ctx.currentTime + t + 0.008);
     g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + t + dur);
-    o.connect(g).connect(ctx.destination); o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + dur + 0.02);
+    o.connect(g).connect(ctx.master || ctx.destination); o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + dur + 0.02);
   }
   const noiseBufs = new Map();
   function noise(ctx, { t = 0, dur = 0.05, gain = 0.15, hp = 1000 }) {
@@ -131,7 +166,7 @@
     const src = ctx.createBufferSource(); src.buffer = buf;
     const f = ctx.createBiquadFilter(); f.type = "highpass"; f.frequency.value = hp;
     const g = ctx.createGain(); g.gain.value = gain;
-    src.connect(f).connect(g).connect(ctx.destination); src.start(ctx.currentTime + t);
+    src.connect(f).connect(g).connect(ctx.master || ctx.destination); src.start(ctx.currentTime + t);
   }
   const SOUNDS = {
     classic: {
@@ -154,6 +189,7 @@
     if (navigator.vibrate && !reduceMotion && now - lastBuzzAt > 90 && Math.abs(speed) < 9) { lastBuzzAt = now; try { navigator.vibrate(5); } catch (e) {} }
   }
   function playWin() { const ctx = audio(); if (ctx) SOUNDS[state.sound].win(ctx); }
+  function playPop() { const ctx = audio(); if (ctx) { tone(ctx, { f: 900, type: "sine", dur: 0.07, gain: 0.16, slideTo: 260 }); noise(ctx, { dur: 0.03, gain: 0.06, hp: 2500 }); } }
 
   // ---------- wheel ----------
   const ctx2d = el.canvas.getContext("2d");
@@ -175,7 +211,7 @@
       const done = state.teams.names.length > 0 && nextNameIndex() < 0;   // finished: show every team, the wheel just rests
       for (let i = 0; i < state.teams.count; i++) if (state.teams.names.length && (done || teamOpen(i, sizes))) open.push(i);
       let a = 0; const span = open.length ? TAU / open.length : 0;
-      return open.map((i) => { const s = { it: { t: teamLabel(i), c: i % PALETTE.length, w: 1, team: i }, start: a, end: a + span, mid: a + span / 2 }; a += span; return s; });
+      return open.map((i) => { const s = { it: { t: teamLabel(i), c: i, w: 1, team: i }, start: a, end: a + span, mid: a + span / 2 }; a += span; return s; });
     }
     const items = state.items.filter((it) => it.t.trim() !== "" || state.items.length <= 1);
     const total = items.reduce((s, it) => s + it.w, 0) || 1;
@@ -235,14 +271,8 @@
     }
     const showLabels = state.mode === "teams" || !(state.hidden && !revealed);
     const glowing = glow && glow.until > performance.now() ? glow : null;
-    for (let i = 0; i < n; i++) {
-      const s = sl[i];
-      x.beginPath(); x.moveTo(0, 0); x.arc(0, 0, R, s.start, s.end); x.closePath();
-      x.fillStyle = PALETTE[s.it.c % PALETTE.length]; x.fill();
-      if (glowing && i !== glowing.idx) { x.fillStyle = "rgba(42,24,56,.42)"; x.fill(); }
-      x.lineWidth = n > 1 ? Math.max(1.5, c * 0.006) : 0; x.strokeStyle = "rgba(42,24,56,.85)"; if (n > 1) x.stroke();
-      drawLabel(x, s, R, c, showLabels);
-    }
+    paintSlices(x, sl, R, c, glowing);
+    for (const s of sl) drawLabel(x, s, R, c, showLabels);
     if (glowing) {
       const s = sl[glowing.idx], k = ((glowing.until - performance.now()) / 1400); const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 110);
       x.beginPath(); x.moveTo(0, 0); x.arc(0, 0, R, s.start, s.end); x.closePath();
@@ -269,6 +299,29 @@
     x.restore();
   }
   const fitCache = new Map(); let hiGrad = null;
+  // the slices: each in its colour, or one picture across the whole wheel (it turns with the wheel); then the lines
+  let wheelPicCv = null, plan = null, autoT = 0;
+  function wheelPic() { return prefs.fill === "image" && wheelPicCv ? wheelPicCv : null; }
+  function paintSlices(x, sl, R, c, glowing) {
+    const n = sl.length, pic = wheelPic(), lw = n > 1 ? Math.max(1.5, c * 0.006) * (state.outline ? 2.2 : 1) : 0;
+    if (pic && n) { x.save(); x.beginPath(); x.arc(0, 0, R, 0, TAU); x.clip(); x.drawImage(pic, -R, -R, R * 2, R * 2); x.restore(); }
+    for (let i = 0; i < n; i++) {
+      const s = sl[i];
+      x.beginPath(); x.moveTo(0, 0); x.arc(0, 0, R, s.start, s.end); x.closePath();
+      if (!pic) { x.fillStyle = col(s.it.c); x.fill(); }
+      if (glowing && i !== glowing.idx) { x.fillStyle = "rgba(42,24,56,.42)"; x.fill(); }
+      if (n > 1) { x.lineWidth = lw; x.strokeStyle = state.outline ? PLUM : "rgba(42,24,56,.85)"; x.stroke(); }
+    }
+    if (state.outline && n) { x.beginPath(); x.arc(0, 0, R, 0, TAU); x.lineWidth = Math.max(2, c * 0.012); x.strokeStyle = PLUM; x.stroke(); }
+  }
+  function loadWheelPic() {
+    wheelPicCv = null;
+    if (!prefs.wheelImg) { draw(); return; }
+    const im = new Image();
+    im.onload = () => { const d = 900, cv = document.createElement("canvas"); cv.width = d; cv.height = d; const g = cv.getContext("2d"), k = Math.max(d / im.width, d / im.height);
+      g.drawImage(im, (d - im.width * k) / 2, (d - im.height * k) / 2, im.width * k, im.height * k); wheelPicCv = cv; if (lens) lens.no = -1; draw(); };
+    im.src = prefs.wheelImg;
+  }
   // In the glass look the hub is a little lens, and the wheel draws what you see through it. It is the same
   // bend the hub used to get from a browser filter (an SVG displacement map): seen through the lens the wheel
   // is stretched sideways and squeezed up and down, hardly at all in the middle and most at the rim, so the
@@ -286,9 +339,12 @@
     x.save(); x.rotate(s.mid + (flip ? Math.PI : 0));
     const maxW = R * 0.66;
     const fs = label === "?" ? c * 0.16 : Math.max(10, Math.min(c * 0.11, span * R * 0.42, (maxW * 1.5) / Math.max(3, label.length)));
-    x.font = `800 ${fs}px Manrope, system-ui, sans-serif`; x.textBaseline = "middle"; x.fillStyle = PLUM;
-    const txt = fit(x, label, maxW);
-    if (flip) { x.textAlign = "left"; x.fillText(txt, -R * 0.9, 0); } else { x.textAlign = "right"; x.fillText(txt, R * 0.9, 0); }
+    // dark words on light slices, light words on dark ones (and on a picture, always light with an outline)
+    const pic = wheelPic(), ink = pic ? "#FFF4E6" : lum(col(s.it.c)) > 0.18 ? PLUM : "#FFF4E6";
+    x.font = `800 ${fs}px Manrope, system-ui, sans-serif`; x.textBaseline = "middle"; x.fillStyle = ink;
+    const txt = fit(x, label, maxW), tx = flip ? -R * 0.9 : R * 0.9; x.textAlign = flip ? "left" : "right";
+    if (state.outline || pic) { x.lineJoin = "round"; x.lineWidth = Math.max(2, fs * 0.2); x.strokeStyle = ink === PLUM ? "rgba(255,255,255,.9)" : "rgba(27,15,36,.88)"; x.strokeText(txt, tx, 0); }
+    x.fillText(txt, tx, 0);
     x.restore();
   }
 
@@ -390,15 +446,8 @@
     // 1. the wheel around the hub, painted again small
     const g = L.srcX; g.setTransform(L.res * L.sc, 0, 0, L.res * L.sc, L.tx, L.ty);
     g.save(); g.rotate(angle);
-    const lw = n > 1 ? Math.max(1.5, c * 0.006) : 0;
-    for (let i = 0; i < n; i++) {
-      const s = sl[i];
-      g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, R, s.start, s.end); g.closePath();
-      g.fillStyle = PALETTE[s.it.c % PALETTE.length]; g.fill();
-      if (glowing && i !== glowing.idx) { g.fillStyle = "rgba(42,24,56,.42)"; g.fill(); }
-      if (n > 1) { g.lineWidth = lw; g.strokeStyle = "rgba(42,24,56,.85)"; g.stroke(); }
-      if (Math.abs(Math.sin(s.mid + angle)) < 0.5) drawLabel(g, s, R, c, showLabels);   // only a label lying almost level can reach into the lens
-    }
+    paintSlices(g, sl, R, c, glowing);
+    for (const s of sl) if (Math.abs(Math.sin(s.mid + angle)) < 0.5) drawLabel(g, s, R, c, showLabels);   // only a label lying almost level can reach into the lens
     g.restore();
     if (!L.hi || L.hi.R !== R) { const q = g.createRadialGradient(-R * 0.4, -R * 0.5, 0, 0, 0, R * 1.1); q.addColorStop(0, "rgba(255,255,255,.2)"); q.addColorStop(0.5, "rgba(255,255,255,.03)"); q.addColorStop(1, "rgba(255,255,255,0)"); L.hi = { R, q }; }
     g.fillStyle = L.hi.q; g.fillRect(L.x0 - 4, L.y0 - 4, L.x1 - L.x0 + 8, L.y1 - L.y0 + 8);
@@ -446,12 +495,20 @@
       const k = Math.min(1, (t - windup.t0) / 160);
       angle = windup.from - 0.22 * Math.sin(k * Math.PI / 2);
       if (k >= 1) { windup = null; spinning = true; }
+    } else if (spinning && plan) {
+      // a spin from the button takes exactly the spin time: it starts fast and slows down smoothly to a stop
+      if (plan.t0 == null) { plan.t0 = t; plan.a0 = angle; }
+      const u = Math.min(1, (t - plan.t0) / (plan.T * 1000)), left = 1 - u;
+      angle = plan.a0 + plan.D * (1 - left * left * left); vel = (3 * plan.D / plan.T) * left * left;
+      if (u >= 1) { vel = 0; plan = null; spinning = false; onStop(); }
     } else if (spinning) {
       angle += vel * dt;
       // friction: stronger when slow so it settles cleanly
       const decel = 0.55 + 1.2 / (1 + Math.abs(vel));
       vel -= vel * decel * dt;
       if (Math.abs(vel) < 0.08) { vel = 0; spinning = false; onStop(); }
+    } else if (idleOn() && !drag) {
+      angle += 0.22 * dt;   // spin slowly while waiting
     }
     const sl = slices();
     if (sl.length > 1) {
@@ -463,9 +520,10 @@
     }
     if (flex > 0) flex = Math.max(0, flex - dt * 7);
     draw();
-    const busy = spinning || drag || windup || intro || layBusy || flex > 0 || (glow && glow.until > performance.now());
+    const busy = spinning || drag || windup || intro || layBusy || flex > 0 || (glow && glow.until > performance.now()) || idleOn();
     if (busy) raf = requestAnimationFrame(frame); else raf = 0;
   }
+  function idleOn() { return state.idle && !reduceMotion && el.overlay.hidden && !spinning && !windup && canSpin(); }
   function tick() { if (!raf) { lastT = performance.now(); raf = requestAnimationFrame(frame); } }
 
   function canSpin() { return state.mode === "teams" ? slices().length >= 1 && nextNameIndex() >= 0 : slices().length >= 2; }
@@ -473,7 +531,8 @@
     if (!canSpin() || spinning || windup) return;
     audio();
     revealed = false; glow = null;
-    vel = power || 20 + Math.random() * 12;      // rad/s
+    plan = power ? null : { T: state.secs, D: state.secs * 8 + Math.random() * TAU, t0: null, a0: 0 };   // about 13 turns in 10 seconds
+    vel = power || (3 * plan.D / plan.T);      // rad/s
     el.hub.disabled = true; el.spinBtn.disabled = true; el.hub.setAttribute("aria-busy", "true");
     if (reduceMotion) spinning = true; else windup = { t0: performance.now(), from: angle };
     tick();
@@ -513,7 +572,7 @@
       const a = s[0], b = s[s.length - 1]; const dt = (b.t - a.t) / 1000;
       let da = b.a - a.a;
       const v = dt > 0 ? da / dt : 0;
-      if (Math.abs(v) > 2.5) { vel = Math.max(-40, Math.min(40, v)); revealed = false; glow = null; spinning = true; el.hub.disabled = true; el.spinBtn.disabled = true; el.hub.setAttribute("aria-busy", "true"); }
+      if (Math.abs(v) > 2.5) { plan = null; vel = Math.max(-40, Math.min(40, v)); revealed = false; glow = null; spinning = true; el.hub.disabled = true; el.spinBtn.disabled = true; el.hub.setAttribute("aria-busy", "true"); }
     }
     tick();
   }
@@ -531,8 +590,10 @@
   let lastWinner = null;
   function showWinner(win) {
     lastWinner = win;
-    const col = PALETTE[win.c % PALETTE.length];
-    el.winnerText.style.setProperty("--w1", col); el.winnerText.style.setProperty("--w2", PALETTE[(win.c + 1) % PALETTE.length]);
+    const wc = col(win.c);
+    el.winnerText.style.setProperty("--w1", wc); el.winnerText.style.setProperty("--w2", col(win.c + 1));
+    document.getElementById("winnerKicker").textContent = state.msg.trim() || "The wheel says";
+    clearTimeout(autoT); if (state.autoClose) autoT = setTimeout(() => { if (!el.overlay.hidden) closeWinner(); }, 5000);
     if (state.mode === "teams") {
       const ni = nextNameIndex(); const name = state.teams.names[ni];
       state.teams.assigned[ni] = win.team; popOne = state.teams.all ? -1 : ni;
@@ -551,20 +612,21 @@
       }
       el.removeAgainBtn.hidden = true;
       resetCard(); el.overlay.hidden = false; el.againBtn.focus();
-      playWin(); confetti(col);
+      playWin(); if (state.confetti) confetti(wc);
       renderTeams(); changed();
       return;
     }
-    el.againBtn.textContent = "Spin again"; el.removeAgainBtn.hidden = false;
+    el.againBtn.textContent = "Spin again"; el.removeAgainBtn.hidden = !state.removeBtn;
     el.winnerText.textContent = win.t.trim() || "(blank)";
     el.winnerSub.textContent = state.remove ? "This one leaves the wheel now." : "";
     resetCard(); el.overlay.hidden = false; el.againBtn.focus();
-    pushHistory(win); playWin(); confetti(col);
+    pushHistory(win); playWin(); if (state.confetti) confetti(wc);
     if (state.remove) { removeItem(win); }
   }
   function closeWinner() {
-    el.overlay.hidden = true; stopConfetti(); lensOff(card);
-    if (lastWinner) { const sl = slices(); const i = sl.findIndex((s) => s.it === lastWinner || (lastWinner.team != null && s.it.team === lastWinner.team)); if (i >= 0) { glow = { idx: i, until: performance.now() + 1400 }; tick(); } }
+    el.overlay.hidden = true; stopConfetti(); lensOff(card); clearTimeout(autoT);
+    if (idleOn()) tick();
+    if (lastWinner && state.glow) { const sl = slices(); const i = sl.findIndex((s) => s.it === lastWinner || (lastWinner.team != null && s.it.team === lastWinner.team)); if (i >= 0) { glow = { idx: i, until: performance.now() + 1400 }; tick(); } }
   }
   el.closeBtn.addEventListener("click", closeWinner);
   el.overlay.addEventListener("click", (e) => { if (e.target === el.overlay) closeWinner(); });
@@ -572,6 +634,7 @@
   el.removeAgainBtn.addEventListener("click", () => { if (lastWinner && !state.remove) removeItem(lastWinner); closeWinner(); spin(); });
   function removeItem(it) {
     const i = state.items.indexOf(it); if (i >= 0) state.items.splice(i, 1);
+    if (state.popSound) playPop();
     lastIdx = -1; renderItems(); changed();
     if (state.items.length < 2) toast("Only one left. Add more options to spin again.");
   }
@@ -584,7 +647,7 @@
   function renderHistory() {
     el.history.hidden = history.length === 0;
     el.historyChips.innerHTML = "";
-    for (const h of history) { const s = document.createElement("span"); s.className = "chip" + (h === history[0] ? " fresh" : ""); s.style.setProperty("--chip-color", PALETTE[h.c % PALETTE.length]); s.textContent = h.t; s.title = h.t; el.historyChips.appendChild(s); }
+    for (const h of history) { const s = document.createElement("span"); s.className = "chip" + (h === history[0] ? " fresh" : ""); s.style.setProperty("--chip-color", col(h.c)); s.textContent = h.t; s.title = h.t; el.historyChips.appendChild(s); }
   }
   el.historyClear.addEventListener("click", () => { history = []; renderHistory(); });
 
@@ -594,7 +657,7 @@
     const cv = el.confetti, x = cv.getContext("2d");
     const cd = lite ? 1 : Math.min(2, dpr); cv.width = innerWidth * cd; cv.height = innerHeight * cd; x.setTransform(cd, 0, 0, cd, 0, 0);
     parts = [];
-    const colors = [mainColor, ...PALETTE];
+    const colors = [mainColor, ...pal()];
     for (let i = 0; i < (reduceMotion ? 40 : lite ? 80 : 160); i++) parts.push({
       x: innerWidth / 2 + (Math.random() - 0.5) * 80, y: innerHeight / 2, vx: (Math.random() - 0.5) * 16, vy: -6 - Math.random() * 12,
       w: 6 + Math.random() * 8, h: 4 + Math.random() * 6, r: Math.random() * TAU, vr: (Math.random() - 0.5) * 0.3, c: colors[i % colors.length], life: 1,
@@ -624,9 +687,9 @@
     el.items.innerHTML = "";
     state.items.forEach((it, i) => {
       const li = document.createElement("li"); li.className = "item";
-      const sw = document.createElement("button"); sw.className = "swatch"; sw.type = "button"; sw.style.setProperty("--sw", PALETTE[it.c % PALETTE.length]);
+      const sw = document.createElement("button"); sw.className = "swatch"; sw.type = "button"; sw.style.setProperty("--sw", col(it.c));
       sw.setAttribute("aria-label", "Change colour"); sw.title = "Change colour";
-      sw.addEventListener("click", () => { it.c = (it.c + 1) % PALETTE.length; sw.style.setProperty("--sw", PALETTE[it.c]); changed(); });
+      sw.addEventListener("click", () => { it.c = (it.c + 1) % pal().length; sw.style.setProperty("--sw", col(it.c)); changed(); });
       const inp = document.createElement("input"); inp.type = "text"; inp.value = it.t; inp.maxLength = 60; inp.placeholder = "Option " + (i + 1); inp.setAttribute("aria-label", "Option " + (i + 1));
       inp.addEventListener("input", () => { it.t = inp.value; changed(); });
       inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addItem(i + 1); } if (e.key === "Backspace" && inp.value === "" && state.items.length > 1) { e.preventDefault(); state.items.splice(i, 1); renderItems(); changed(); focusItem(Math.max(0, i - 1)); } });
@@ -646,11 +709,11 @@
   function focusItem(i) { const inp = el.items.querySelectorAll('input[type="text"]')[i]; if (inp) { inp.focus(); inp.select(); } }
   function addItem(at) {
     if (state.items.length >= MAX_ITEMS) { toast("That's the limit, " + MAX_ITEMS + " options."); return; }
-    const used = state.items.map((x) => x.c); let c = 0; for (let k = 0; k < PALETTE.length; k++) if (!used.includes(k)) { c = k; break; } if (used.length >= PALETTE.length) c = state.items.length % PALETTE.length;
+    const P = pal().length, used = state.items.map((x) => x.c % P); let c = 0; for (let k = 0; k < P; k++) if (!used.includes(k)) { c = k; break; } if (used.length >= P) c = state.items.length % P;
     const idx = at == null ? state.items.length : at;
     // avoid two neighbours sharing a colour
     const prev = state.items[idx - 1] || state.items[state.items.length - 1], next = state.items[idx] || state.items[0];
-    for (let k = 0; k < PALETTE.length && ((prev && prev.c === c) || (next && next.c === c)); k++) c = (c + 1) % PALETTE.length;
+    for (let k = 0; k < P && ((prev && prev.c % P === c) || (next && next.c % P === c)); k++) c = (c + 1) % P;
     state.items.splice(idx, 0, { t: "", c, w: 1 }); renderItems(); changed(); focusItem(idx);
     const li = el.items.children[idx]; if (li) li.classList.add("fresh");
   }
@@ -667,7 +730,7 @@
   el.title.addEventListener("input", () => { state.title = el.title.value; changed(); });
 
   function changed() {
-    lastIdx = -1; revealed = false; glow = null; layDirty = true; draw(); syncUrl();
+    lastIdx = -1; revealed = false; glow = null; layDirty = true; applyLooks(); draw(); syncUrl();
     const ok = canSpin(); el.spinBtn.disabled = !ok || spinning; el.hub.disabled = !ok || spinning; el.emptyHint.hidden = ok;
     el.emptyHint.textContent = state.mode === "teams" ? (state.teams.names.length < 2 ? "Add at least two names in the Teams tab." : "Everyone is placed. Start over to split again.") : "Add at least two options to spin.";
     el.shuffleBtn.hidden = state.mode === "teams";
@@ -691,7 +754,7 @@
     const sizes = teamSizes();
     el.teamList.innerHTML = "";
     for (let i = 0; i < T.count; i++) {
-      const li = document.createElement("li"); li.className = "team" + (T.names.length && ni >= 0 && !teamOpen(i, sizes) ? " is-full" : ""); li.style.setProperty("--tc", PALETTE[i % PALETTE.length]);
+      const li = document.createElement("li"); li.className = "team" + (T.names.length && ni >= 0 && !teamOpen(i, sizes) ? " is-full" : ""); li.style.setProperty("--tc", col(i));
       if (!reduceMotion && (teamsAppear === "all" || teamsAppear === i)) { li.classList.add("appear"); li.style.animationDelay = (teamsAppear === "all" ? 80 + i * 45 : 0) + "ms"; }
       const name = document.createElement("input"); name.type = "text"; name.maxLength = 24; name.value = T.labels[i] || ""; name.placeholder = teamLabel(i); name.setAttribute("aria-label", "Name of team " + (i + 1));
       name.addEventListener("input", () => { T.labels[i] = name.value; changed(); });
@@ -796,6 +859,95 @@
   el.removeSel.addEventListener("change", () => { state.remove = el.removeSel.checked; changed(); });
   el.hiddenSel.addEventListener("change", () => { state.hidden = el.hiddenSel.checked; changed(); });
   el.themeSel.addEventListener("change", () => { prefs.theme = el.themeSel.value; applyTheme(); saveJSON(LS.prefs, prefs); });
+  // ---- the new settings (While it spins, When it stops, How the wheel looks) ----
+  const S = (id) => document.getElementById(id);
+  const HUB_SIZES = { s: "19%", m: "26%", l: "34%" };
+  function paintRange(r) { r.style.setProperty("--fill-to", ((r.value - r.min) / (r.max - r.min)) * 100 + "%"); }
+  // what the looks do to the page around the wheel
+  function applyLooks() {
+    const R0 = document.documentElement;
+    el.title.hidden = !state.showTitle;
+    el.wrap.classList.toggle("no-shadow", !state.shadow);
+    R0.classList.toggle("no-mesh", !state.mesh);
+    if (state.page) { const light = lum(state.page) > 0.35; R0.style.setProperty("--page-bg", state.page); R0.style.setProperty("--page-ink", light ? "#2A1838" : "#FFF4E6"); R0.style.setProperty("--page-ink-dim", light ? "rgba(42,24,56,.66)" : "rgba(255,244,230,.7)"); }
+    else ["--page-bg", "--page-ink", "--page-ink-dim"].forEach((k) => R0.style.removeProperty(k));
+    el.hub.classList.toggle("has-pic", !!prefs.hubImg);
+    if (prefs.hubImg) el.hub.style.setProperty("--hub-pic", 'url("' + prefs.hubImg + '")'); else el.hub.style.removeProperty("--hub-pic");
+    el.wrap.style.setProperty("--hub-size", HUB_SIZES[prefs.hubSize] || HUB_SIZES.s);
+    if (idleOn()) tick();
+  }
+  // the eight colour cells are made once (rebuilding them would close a colour picker that is open)
+  const colCells = [];
+  for (let i = 0; i < 8; i++) {
+    const cell = document.createElement("div"); cell.className = "colcell";
+    const inp = document.createElement("input"); inp.type = "color"; inp.setAttribute("aria-label", "Colour " + (i + 1));
+    const tg = document.createElement("button"); tg.type = "button"; tg.className = "coltog"; tg.setAttribute("aria-label", "Use colour " + (i + 1));
+    inp.addEventListener("input", () => { if (state.pal !== "custom") { state.cols = (PALS[state.pal] || PALETTE).map((h) => h.toLowerCase()); state.pal = "custom"; } state.cols[i] = inp.value.toLowerCase(); looksChanged(); });
+    tg.addEventListener("click", () => { const off = state.off ^ (1 << i); let on = 0; for (let k = 0; k < 8; k++) if (!(off & (1 << k))) on++; if (on < 2) { toast("Keep at least two colours"); return; } state.off = off; looksChanged(); });
+    cell.append(inp, tg); S("cols").appendChild(cell); colCells.push({ cell, inp, tg });
+  }
+  function syncLooksUI() {
+    S("volSel").value = Math.round(prefs.volume * 100); S("volOut").textContent = Math.round(prefs.volume * 100) + "%";
+    S("secsSel").value = state.secs; S("secsOut").textContent = state.secs + (state.secs === 1 ? " second" : " seconds");
+    paintRange(S("volSel")); paintRange(S("secsSel"));
+    S("idleSel").checked = state.idle; S("titleSel").checked = state.showTitle; el.hiddenSel.checked = state.hidden;
+    if (document.activeElement !== S("msgSel")) S("msgSel").value = state.msg;
+    S("confettiSel").checked = state.confetti; S("glowSel").checked = state.glow; S("removeBtnSel").checked = state.removeBtn; el.removeSel.checked = state.remove;
+    S("popSel").checked = state.popSound; S("autoCloseSel").checked = state.autoClose;
+    S("palSel").value = state.pal;
+    const base = state.pal === "custom" && state.cols ? state.cols : PALS[state.pal] || PALETTE;
+    colCells.forEach((c, i) => { const h = base[i].toLowerCase(); if (c.inp.value !== h) c.inp.value = h; const on = !(state.off & (1 << i)); c.cell.classList.toggle("off", !on); c.tg.setAttribute("aria-pressed", String(on)); });
+    S("fillSel").value = prefs.fill === "image" ? "image" : "colors";
+    S("wheelPicNote").textContent = prefs.wheelImg ? "Chosen · on this device" : "None yet"; S("wheelPicDel").hidden = !prefs.wheelImg; S("wheelPicBtn").textContent = prefs.wheelImg ? "Change" : "Choose";
+    S("hubPicNote").textContent = prefs.hubImg ? "Chosen · on this device" : "None yet · on this device"; S("hubPicDel").hidden = !prefs.hubImg; S("hubPicBtn").textContent = prefs.hubImg ? "Change" : "Choose";
+    S("hubSizeSel").value = HUB_SIZES[prefs.hubSize] ? prefs.hubSize : "s";
+    S("outlineSel").checked = state.outline; S("shadowSel").checked = state.shadow; S("meshSel").checked = state.mesh;
+    S("pageSel").value = state.page || (isDark() ? "#1b0f24" : "#fff6ec"); S("pageReset").hidden = !state.page; S("pageNote").textContent = state.page ? "Your own" : "The theme's own";
+  }
+  function looksChanged() { renderItems(); renderTeams(); renderHistory(); changed(); syncLooksUI(); }
+  const flag = (id, key, after) => S(id).addEventListener("change", () => { state[key] = S(id).checked; changed(); if (after) after(); });
+  flag("idleSel", "idle", () => tick()); flag("titleSel", "showTitle"); flag("confettiSel", "confetti"); flag("glowSel", "glow"); flag("removeBtnSel", "removeBtn");
+  flag("popSel", "popSound", () => { if (state.popSound) playPop(); }); flag("autoCloseSel", "autoClose"); flag("shadowSel", "shadow"); flag("meshSel", "mesh");
+  flag("outlineSel", "outline", () => { layDirty = true; draw(); });
+  S("msgSel").addEventListener("input", () => { state.msg = S("msgSel").value.slice(0, 40); changed(); });
+  S("volSel").addEventListener("input", () => { prefs.volume = +S("volSel").value / 100; if (ac && ac.master) ac.master.gain.value = prefs.volume; saveJSON(LS.prefs, prefs); syncLooksUI(); });
+  S("volSel").addEventListener("change", () => playTick(12));
+  S("secsSel").addEventListener("input", () => { state.secs = clampInt(S("secsSel").value, 2, 30, 5); changed(); syncLooksUI(); });
+  S("soundTry").addEventListener("click", () => {
+    if (prefs.muted) { toast("Sound is off. Turn it on with the speaker at the top."); return; }
+    for (let i = 0; i < 7; i++) setTimeout(() => { const c = audio(); if (c) SOUNDS[state.sound].tick(c, 14 - i * 2); }, i * (90 + i * 22));
+    setTimeout(playWin, 1050);
+  });
+  S("palSel").addEventListener("change", () => { const v = S("palSel").value; if (v === "custom" && !state.cols) state.cols = (PALS[state.pal] || PALETTE).map((h) => h.toLowerCase()); state.pal = v; looksChanged(); });
+  S("pageSel").addEventListener("input", () => { state.page = hex6(S("pageSel").value); changed(); syncLooksUI(); });
+  S("pageReset").addEventListener("click", () => { state.page = ""; changed(); syncLooksUI(); });
+  S("hubSizeSel").addEventListener("change", () => { prefs.hubSize = S("hubSizeSel").value; saveJSON(LS.prefs, prefs); applyLooks(); setTimeout(resize, 30); });
+  S("fillSel").addEventListener("change", () => { prefs.fill = S("fillSel").value; saveJSON(LS.prefs, prefs); if (prefs.fill === "image" && !prefs.wheelImg) { picFor = "wheel"; S("picFile").click(); } loadWheelPic(); syncLooksUI(); });
+  // pictures: cut to a square, made smaller, and kept on this device (a picture is far too big for a link)
+  let picFor = "wheel";
+  function readPic(file, d) {
+    return new Promise((ok, bad) => {
+      const url = URL.createObjectURL(file), im = new Image();
+      im.onload = () => { const cv = document.createElement("canvas"); cv.width = d; cv.height = d; const g = cv.getContext("2d"), k = Math.max(d / im.width, d / im.height);
+        g.drawImage(im, (d - im.width * k) / 2, (d - im.height * k) / 2, im.width * k, im.height * k); URL.revokeObjectURL(url); ok(cv.toDataURL("image/webp", 0.86)); };
+      im.onerror = () => { URL.revokeObjectURL(url); bad(new Error("not a picture")); };
+      im.src = url;
+    });
+  }
+  S("wheelPicBtn").addEventListener("click", () => { picFor = "wheel"; S("picFile").click(); });
+  S("hubPicBtn").addEventListener("click", () => { picFor = "hub"; S("picFile").click(); });
+  S("picFile").addEventListener("change", async () => {
+    const f = S("picFile").files[0]; S("picFile").value = ""; if (!f) return;
+    try {
+      const url = await readPic(f, picFor === "wheel" ? 900 : 360);
+      if (picFor === "wheel") { prefs.wheelImg = url; prefs.fill = "image"; loadWheelPic(); } else prefs.hubImg = url;
+      try { localStorage.setItem(LS.prefs, JSON.stringify(prefs)); } catch (e) { toast("Shown now, but too big to keep after a reload"); }
+      applyLooks(); syncLooksUI();
+    } catch (e) { toast("That file is not a picture"); }
+  });
+  S("wheelPicDel").addEventListener("click", () => { delete prefs.wheelImg; prefs.fill = "colors"; saveJSON(LS.prefs, prefs); loadWheelPic(); syncLooksUI(); });
+  S("hubPicDel").addEventListener("click", () => { delete prefs.hubImg; saveJSON(LS.prefs, prefs); applyLooks(); syncLooksUI(); });
+
   el.resetBtn.addEventListener("click", () => { if (!confirm("Start a fresh wheel? The current one stays reachable through its link.")) return; applyState(fresh()); history = []; renderHistory(); setTab("options"); });
   el.muteBtn.addEventListener("click", () => { prefs.muted = !prefs.muted; el.muteBtn.setAttribute("aria-pressed", String(prefs.muted)); el.muteBtn.setAttribute("aria-label", prefs.muted ? "Unmute sounds" : "Mute sounds"); saveJSON(LS.prefs, prefs); if (!prefs.muted) playTick(10); });
   el.themeBtn.addEventListener("click", () => { const dark = isDark(); prefs.theme = dark ? "light" : "dark"; el.themeSel.value = prefs.theme; applyTheme(); saveJSON(LS.prefs, prefs); });
@@ -977,16 +1129,16 @@
   // ---------- apply + boot ----------
   function applyState(s) {
     const g = s.teams && Array.isArray(s.teams.names) ? s.teams : freshTeams();
-    state = { title: s.title || "", items: (s.items || []).map((it) => ({ t: String(it.t || ""), c: clampInt(it.c, 0, PALETTE.length - 1, 0), w: clampInt(it.w, 1, 9, 1) })), hidden: !!s.hidden, remove: !!s.remove, sound: SOUNDS[s.sound] ? s.sound : "classic",
-      mode: s.mode === "teams" ? "teams" : "wheel", teams: { names: g.names.slice(0, 200), count: clampInt(g.count, 2, 8, 2), labels: (g.labels || []).slice(0, 8), assigned: g.names.map((_, i) => clampInt((g.assigned || [])[i], -1, 7, -1)), all: !!g.all } };
+    state = Object.assign({ title: s.title || "", items: (s.items || []).map((it) => ({ t: String(it.t || ""), c: clampInt(it.c, 0, PALETTE.length - 1, 0), w: clampInt(it.w, 1, 9, 1) })), hidden: !!s.hidden, remove: !!s.remove, sound: SOUNDS[s.sound] ? s.sound : "classic",
+      mode: s.mode === "teams" ? "teams" : "wheel", teams: { names: g.names.slice(0, 200), count: clampInt(g.count, 2, 8, 2), labels: (g.labels || []).slice(0, 8), assigned: g.names.map((_, i) => clampInt((g.assigned || [])[i], -1, 7, -1)), all: !!g.all } }, normLooks(s));
     if (state.items.length === 0) state.items = [{ t: "", c: 0, w: 1 }, { t: "", c: 1, w: 1 }];
     el.title.value = state.title; el.soundSel.value = state.sound; el.removeSel.checked = state.remove; el.hiddenSel.checked = state.hidden;
-    lastIdx = -1; cascadeItems = true; renderItems(); teamsAppear = "all"; renderTeams(); changed();
+    lastIdx = -1; cascadeItems = true; renderItems(); teamsAppear = "all"; renderTeams(); changed(); syncLooksUI();
     if (state.mode === "teams" && activeTab === "options") setTab("teams");
   }
   function boot() {
     setTimeout(() => document.body.classList.add("ready"), 1400);
-    applyTheme(); applyLook(); el.themeSel.value = prefs.theme; el.muteBtn.setAttribute("aria-pressed", String(!!prefs.muted));
+    applyTheme(); applyLook(); loadWheelPic(); el.themeSel.value = prefs.theme; el.muteBtn.setAttribute("aria-pressed", String(!!prefs.muted));
     const m = location.hash.match(/#w=([A-Za-z0-9\-_]+)/);
     const fromLink = m && decodeState(m[1]);
     const last = loadJSON(LS.last, null);
