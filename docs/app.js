@@ -341,7 +341,7 @@
     const fs = label === "?" ? c * 0.16 : Math.max(10, Math.min(c * 0.11, span * R * 0.42, (maxW * 1.5) / Math.max(3, label.length)));
     // dark words on light slices, light words on dark ones (and on a picture, always light with an outline)
     const pic = wheelPic(), ink = pic ? "#FFF4E6" : lum(col(s.it.c)) > 0.18 ? PLUM : "#FFF4E6";
-    x.font = `800 ${fs}px Manrope, system-ui, sans-serif`; x.textBaseline = "middle"; x.fillStyle = ink;
+    x.font = `600 ${fs}px Fredoka, Nunito, system-ui, sans-serif`; x.textBaseline = "middle"; x.fillStyle = ink;
     const txt = fit(x, label, maxW), tx = flip ? -R * 0.9 : R * 0.9; x.textAlign = flip ? "left" : "right";
     if (state.outline || pic) { x.lineJoin = "round"; x.lineWidth = Math.max(2, fs * 0.2); x.strokeStyle = ink === PLUM ? "rgba(255,255,255,.9)" : "rgba(27,15,36,.88)"; x.strokeText(txt, tx, 0); }
     x.fillText(txt, tx, 0);
@@ -1121,6 +1121,8 @@
   }
   window.addEventListener("resize", () => placeGlider(false));
   document.fonts && document.fonts.ready.then(() => placeGlider(false));
+  // the wheel is a canvas: draw its words again once their font has arrived, or the first wheel shows a stand-in font
+  document.fonts && document.fonts.load('600 16px Fredoka').then(() => { fitCache.clear(); draw(); }, () => {});
 
   // toast
   let toastT = 0;

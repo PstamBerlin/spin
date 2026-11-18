@@ -38,7 +38,7 @@ async def main():
             await pg.reload(); await pg.wait_for_timeout(800)
             ok = await pg.evaluate("!!window.__spin && window.__marker === 'new build' && document.querySelectorAll('.item').length > 0")
             check("opens offline with the latest copy", ok)
-            fonts = await pg.evaluate("document.fonts.check('800 16px Unbounded')")
+            fonts = await pg.evaluate("document.fonts.check('600 16px Fredoka') && document.fonts.check('700 16px Nunito')")
             check("fonts are there offline", fonts)
             await b.close()
     finally:

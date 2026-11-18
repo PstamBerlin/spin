@@ -1,15 +1,15 @@
-Fonts shipped with Chalkboard
-=============================
+Fonts shipped with Spin
+=======================
 
-Unbounded-500.woff2, Unbounded-800.woff2:
-Copyright 2022 The Unbounded Project Authors (https://github.com/googlefonts/unbounded)
+Fredoka.woff2:
+Copyright 2016 The Fredoka Project Authors (https://github.com/hafontia/Fredoka-One)
 
-Manrope-500.woff2, Manrope-600.woff2, Manrope-700.woff2, Manrope-800.woff2:
-Copyright 2018 The Manrope Project Authors (https://github.com/googlefonts/manrope)
+Nunito.woff2:
+Copyright 2014 The Nunito Project Authors (https://github.com/googlefonts/nunito)
 
 Both are the Latin subset as served by Google Fonts (each file is the
 variable font, so one file covers every weight). They are bundled so
-Chalkboard never fetches a font from the network.
+Spin never fetches a font from the network.
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:

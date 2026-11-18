@@ -1,8 +1,8 @@
 /* Spin offline shell. Online: the fresh files from the network. Offline: the last copy that was fetched.
    VERSION is written by tools/stamp.py from the site's contents, so every deploy renews the offline copy. */
-const VERSION = "spin-d2647f1e";
+const VERSION = "spin-ed551717";
 const SHELL = ["./", "./index.html", "./style.css", "./glass.css", "./app.js", "./qrcode.js", "./icon.svg", "./manifest.webmanifest",
-  "./fonts/Manrope-500.woff2", "./fonts/Manrope-700.woff2", "./fonts/Manrope-800.woff2", "./fonts/Unbounded-500.woff2", "./fonts/Unbounded-800.woff2"];
+  "./fonts/Nunito.woff2", "./fonts/Fredoka.woff2"];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(VERSION)
     // all or nothing: if one file cannot be fetched the install fails, and the old worker keeps its complete copy

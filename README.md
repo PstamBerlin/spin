@@ -25,5 +25,5 @@ paste list with weights, QR code, saved wheels, remove-winner mode, theme, drag 
 
 ## Credits
 
-Fonts Unbounded and Manrope (SIL Open Font License, see `docs/fonts/OFL.txt`).
+Fonts Fredoka and Nunito (SIL Open Font License, see `docs/fonts/OFL.txt`).
 QR code library by Kazuhiko Arase (MIT).
