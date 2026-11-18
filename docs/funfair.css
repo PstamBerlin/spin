@@ -1,0 +1,156 @@
+/* Funfair: Spin's own look (the default since 18 Nov 2026). A striped awning hangs under the bar, light
+   bulbs run round the wheel (drawn by the wheel itself, app.js), the options and winners are little tickets,
+   and buttons are chunky with a dashed inner line, like a fairground stall.
+   Everything here is scoped to :root[data-style="funfair"]. Settings, Look, has four choices:
+     Funfair            data-style="funfair"                      (default)
+     Funfair glass      data-style="funfair" + data-look="glass"  (its own liquid glass: candy glass, glass awning)
+     Old look           neither                                   (the frosted candy look, untouched)
+     Old look, glass    data-look="glass"                         (the earlier liquid glass, untouched)
+   Shapes are shared by Funfair and Funfair glass; colours and edges are split with :not([data-look="glass"]).
+   Nothing here filters something that moves, the same rule as glass.css. */
+
+/* ---------- colours ---------- */
+:root[data-style="funfair"]{
+  --ff-a:#FF3B5C; --ff-b:#FFE3E8; --ff-bulb:#FFD400;
+  --ff-line:#2A1838; --ff-soft:rgba(42,24,56,.16); --ff-press:#B81D3B;
+  --ff-tab-on:#2A1838; --ff-tab-on-ink:#FFF6EC;
+  --radius:18px; --radius-s:10px;
+}
+:root[data-style="funfair"]:not([data-look="glass"]){
+  --ff-paper:#FFFDF8; --ff-shadow:0 14px 34px rgba(42,24,56,.15);
+  --field:#FFFFFF; --field-line:rgba(42,24,56,.2); --chip:rgba(42,24,56,.07);
+  --frost-strong:#FFFDF8; --frost-line:rgba(42,24,56,.2);
+}
+:root[data-style="funfair"][data-theme="dark"]{
+  --ff-b:#F1D3DA; --ff-line:rgba(255,244,230,.72); --ff-soft:rgba(255,255,255,.14); --ff-tab-on:#FFD400; --ff-tab-on-ink:#2A1838;
+}
+:root[data-style="funfair"][data-theme="dark"]:not([data-look="glass"]){
+  --ff-paper:#2A1838; --ff-shadow:0 16px 40px rgba(0,0,0,.45);
+  --field:rgba(255,255,255,.06); --field-line:rgba(255,255,255,.17); --chip:rgba(255,255,255,.09);
+  --frost-strong:#33204A; --frost-line:rgba(255,255,255,.2);
+}
+@media (prefers-color-scheme: dark){
+  :root[data-style="funfair"]:not([data-theme="light"]){
+    --ff-b:#F1D3DA; --ff-line:rgba(255,244,230,.72); --ff-soft:rgba(255,255,255,.14); --ff-tab-on:#FFD400; --ff-tab-on-ink:#2A1838;
+  }
+  :root[data-style="funfair"]:not([data-theme="light"]):not([data-look="glass"]){
+    --ff-paper:#2A1838; --ff-shadow:0 16px 40px rgba(0,0,0,.45);
+    --field:rgba(255,255,255,.06); --field-line:rgba(255,255,255,.17); --chip:rgba(255,255,255,.09);
+    --frost-strong:#33204A; --frost-line:rgba(255,255,255,.2);
+  }
+}
+
+/* ---------- the awning: stripes with a scalloped hem (under the bar and on top of the winner card) ---------- */
+:root[data-style="funfair"] .bar::after,
+:root[data-style="funfair"] .winner::after{
+  content:""; position:absolute; left:0; right:0; pointer-events:none;
+  background:repeating-linear-gradient(90deg,var(--ff-a) 0 20px,var(--ff-b) 20px 40px);
+  -webkit-mask:radial-gradient(10px at 50% 0,#000 97%,transparent) 0 100%/20px 10px repeat-x,linear-gradient(#000 0 0) 0 0/100% calc(100% - 10px) no-repeat;
+          mask:radial-gradient(10px at 50% 0,#000 97%,transparent) 0 100%/20px 10px repeat-x,linear-gradient(#000 0 0) 0 0/100% calc(100% - 10px) no-repeat;
+}
+:root[data-style="funfair"] .bar::after{top:100%; height:20px}
+:root[data-style="funfair"] .winner::after{top:0; height:30px; border-radius:var(--radius) var(--radius) 0 0}
+
+/* ---------- Funfair (solid) ---------- */
+:root[data-style="funfair"]:not([data-look="glass"]) .bar{background:var(--ff-paper); border-color:var(--ff-a); -webkit-backdrop-filter:none; backdrop-filter:none}
+:root[data-style="funfair"]:not([data-look="glass"]) .panel,
+:root[data-style="funfair"]:not([data-look="glass"]) .history{background:var(--ff-paper); border:0; box-shadow:var(--ff-shadow)}
+:root[data-style="funfair"]:not([data-look="glass"]) .winner{background:var(--ff-paper); border:0; box-shadow:0 24px 60px rgba(42,24,56,.35)}
+
+/* the panel: a stall board with a striped band on top */
+:root[data-style="funfair"] .panel{padding-top:20px}
+@media (max-width: 899px){:root[data-style="funfair"] .panel{position:relative}}
+:root[data-style="funfair"] .panel::before{content:"";position:absolute;left:0;right:0;top:0;height:10px;border-radius:var(--radius) var(--radius) 0 0;pointer-events:none;
+  background:repeating-linear-gradient(90deg,var(--ff-a) 0 20px,var(--ff-b) 20px 40px)}
+
+/* tabs: little boxed signs, the chosen one filled in; the glider is the filled block and slides */
+:root[data-style="funfair"]:not([data-look="glass"]) .tabs{margin:4px 0 14px; padding:4px; gap:2px; border-radius:12px; box-shadow:inset 0 0 0 1.5px var(--ff-line)}
+:root[data-style="funfair"]:not([data-look="glass"]) .tab{position:relative; z-index:1; border-bottom:0; border-radius:8px; padding:8px 11px; font-size:15px; transition:color var(--dur-2) var(--ease)}
+:root[data-style="funfair"]:not([data-look="glass"]) .tab.is-active{color:var(--ff-tab-on-ink)}
+:root[data-style="funfair"]:not([data-look="glass"]) .tabs:not(.has-glider) .tab.is-active{background:var(--ff-tab-on)}
+:root[data-style="funfair"]:not([data-look="glass"]) .tab-glider{top:4px; bottom:4px; height:auto; border-radius:8px; background:var(--ff-tab-on)}
+:root[data-style="funfair"]:not([data-look="glass"]) .tab-glider.stretch{height:auto; transform:scaleY(calc(1 - .12 * var(--moving))); transition:left 170ms var(--ease-out),width 170ms var(--ease-out),transform 170ms var(--ease-out)}
+:root[data-style="funfair"]:not([data-look="glass"]) .tab-glider.settle{height:auto; transform:none; transition:left var(--t-spring) var(--glide),width var(--t-spring) var(--glide),transform var(--t-spring) var(--spring)}
+
+/* buttons: chunky stall buttons. The main one has a dashed line inside and a hard edge you push down */
+:root[data-style="funfair"] .btn{border-radius:11px}
+:root[data-style="funfair"] .icon-btn{border-radius:10px}
+:root[data-style="funfair"]:not([data-look="glass"]) .btn-primary{
+  background:var(--ff-a); color:#fff; outline:2px dashed rgba(255,255,255,.75); outline-offset:-6px; padding:15px 34px;
+  box-shadow:0 5px 0 var(--ff-press), 0 12px 22px rgba(255,59,92,.28)}
+:root[data-style="funfair"]:not([data-look="glass"]) .btn-primary:hover{box-shadow:0 6px 0 var(--ff-press), 0 14px 26px rgba(255,59,92,.34)}
+:root[data-style="funfair"]:not([data-look="glass"]) .btn-primary:active{translate:0 3px; box-shadow:0 2px 0 var(--ff-press), 0 6px 14px rgba(255,59,92,.25)}
+:root[data-style="funfair"]:not([data-look="glass"]) .btn-ghost{background:var(--ff-paper); border:1.5px solid var(--ff-line); box-shadow:0 3px 0 var(--ff-soft)}
+:root[data-style="funfair"]:not([data-look="glass"]) .btn-ghost:active{translate:0 2px; box-shadow:none}
+:root[data-style="funfair"] .btn-primary:focus-visible{outline:3px solid var(--sky); outline-offset:2px}
+:root[data-style="funfair"] .btn-primary:disabled{translate:none}
+
+/* the hub: a big red stall button with a white ring */
+:root[data-style="funfair"]:not([data-look="glass"]) .hub{border:3px solid #fff; color:#fff;
+  box-shadow:0 0 0 3px var(--plum), 0 10px 24px rgba(42,24,56,.38), inset 0 -5px 0 rgba(0,0,0,.16)}
+:root[data-style="funfair"]:not([data-look="glass"]) .hub:not(.has-pic){background:var(--ff-a)}
+
+/* tickets: the winners strip and the presets have notched ends */
+:root[data-style="funfair"] .chip{border-radius:5px; padding:4px 15px; font-family:"Fredoka",sans-serif; font-weight:600;
+  -webkit-mask:radial-gradient(5px at 0 50%,transparent 97%,#000) 0 0/51% 100% no-repeat,radial-gradient(5px at 100% 50%,transparent 97%,#000) 100% 0/51% 100% no-repeat;
+          mask:radial-gradient(5px at 0 50%,transparent 97%,#000) 0 0/51% 100% no-repeat,radial-gradient(5px at 100% 50%,transparent 97%,#000) 100% 0/51% 100% no-repeat}
+:root[data-style="funfair"] .chip:first-child{box-shadow:none}
+:root[data-style="funfair"] .chip:first-child::before{content:"\2605"; font-size:.85em}
+:root[data-style="funfair"] .history{border-radius:12px}
+:root[data-style="funfair"] .history-label{font-family:"Fredoka",sans-serif; font-weight:600; letter-spacing:.14em}
+:root[data-style="funfair"] .preset{border-radius:6px; border-style:dashed;
+  -webkit-mask:radial-gradient(7px at 0 50%,transparent 97%,#000) 0 0/51% 100% no-repeat,radial-gradient(7px at 100% 50%,transparent 97%,#000) 100% 0/51% 100% no-repeat;
+          mask:radial-gradient(7px at 0 50%,transparent 97%,#000) 0 0/51% 100% no-repeat,radial-gradient(7px at 100% 50%,transparent 97%,#000) 100% 0/51% 100% no-repeat}
+:root[data-style="funfair"] .preset strong{font-family:"Fredoka",sans-serif; font-weight:600}
+:root[data-style="funfair"] :is(.saved li,.team){border-radius:8px}
+
+/* fields and small controls: squarer corners */
+:root[data-style="funfair"] :is(.item input[type="text"], .share-row input, .setting select, .set-text){border-radius:9px}
+:root[data-style="funfair"] :is(#teamNames, .paste textarea){border-radius:12px}
+:root[data-style="funfair"] .seg{border-radius:12px}
+:root[data-style="funfair"] .seg::before,:root[data-style="funfair"] .seg-btn{border-radius:8px}
+:root[data-style="funfair"]:not([data-look="glass"]) .seg::before{background:var(--ff-paper); border:1.5px solid var(--ff-line); box-shadow:0 3px 0 var(--ff-soft)}
+:root[data-style="funfair"]:not([data-look="glass"]) .switch input:checked{background:var(--ff-a)}
+:root[data-style="funfair"]:not([data-look="glass"]) .coltog[aria-pressed="true"]{background:var(--ff-a)}
+
+/* the settings headings: a string of light bulbs instead of a line */
+:root[data-style="funfair"] .set-head::after{height:8px; border-radius:0; opacity:1;
+  background:radial-gradient(circle,var(--ff-bulb) 2.4px,rgba(255,212,0,.28) 3.2px,transparent 4.2px) 0 50%/12px 8px repeat-x}
+
+/* the winner card: the awning on top, the name in red with a yellow print shadow */
+:root[data-style="funfair"] .winner{border-radius:var(--radius); padding-top:46px}
+:root[data-style="funfair"] .winner::before{z-index:1; top:7px; background:#fff; opacity:.9}
+:root[data-style="funfair"] .winner-kicker{font-family:"Fredoka",sans-serif; font-weight:600; letter-spacing:.18em}
+html:root[data-style="funfair"] .winner-text{color:var(--ff-a); background:none; -webkit-background-clip:border-box; background-clip:border-box;
+  text-shadow:3px 3px 0 var(--ff-bulb)}
+:root[data-style="funfair"] .toast{border-radius:11px}
+
+/* ---------- Funfair glass: its own liquid glass ----------
+   Candy glass: the panes are the clear glass of glass.css, but the awning, the stripe band and the tickets are
+   tinted glass you can see the colours through, the main button is red candy glass with its dashed line, and the
+   bulbs round the wheel become glass beads (app.js). The bar is a floating board instead of a capsule, so the
+   awning can hang under it. */
+:root[data-style="funfair"][data-look="glass"]{--ff-a:rgba(255,59,92,.62); --ff-b:rgba(255,255,255,.42); --radius:22px; --radius-s:12px}
+:root[data-style="funfair"][data-look="glass"][data-theme="dark"]{--ff-b:rgba(255,255,255,.2)}
+@media (prefers-color-scheme: dark){:root[data-style="funfair"][data-look="glass"]:not([data-theme="light"]){--ff-b:rgba(255,255,255,.2)}}
+:root[data-style="funfair"][data-look="glass"] .bar{border-radius:18px; overflow:visible}
+:root[data-style="funfair"][data-look="glass"] .bar::after{left:18px; right:18px; height:18px;
+  filter:none; box-shadow:none}
+:root[data-style="funfair"][data-look="glass"] .bar::after,
+:root[data-style="funfair"][data-look="glass"] .winner::after,
+:root[data-style="funfair"][data-look="glass"] .panel::before{
+  background:linear-gradient(180deg,rgba(255,255,255,.55),rgba(255,255,255,0) 45%),repeating-linear-gradient(90deg,var(--ff-a) 0 20px,var(--ff-b) 20px 40px)}
+:root[data-style="funfair"][data-look="glass"] .panel::before{height:12px; opacity:.9}
+:root[data-style="funfair"][data-look="glass"] .tabs::before{border-radius:14px}
+:root[data-style="funfair"][data-look="glass"] .tab{border-radius:10px}
+:root[data-style="funfair"][data-look="glass"] .tab-glider{border-radius:10px}
+:root[data-style="funfair"][data-look="glass"] .btn-primary{color:#fff; text-shadow:0 1px 2px rgba(120,0,30,.35);
+  background:linear-gradient(180deg,rgba(255,110,135,.82),rgba(255,59,92,.74) 55%,rgba(214,30,66,.8));
+  outline:2px dashed rgba(255,255,255,.7); outline-offset:-6px;
+  box-shadow:inset 0 2px 0 rgba(255,255,255,.75), inset 0 -8px 14px rgba(120,0,30,.22), inset 0 0 0 1px rgba(255,255,255,.3), 0 12px 26px rgba(255,59,92,.36)}
+:root[data-style="funfair"][data-look="glass"] .chip{color:var(--plum);
+  background:linear-gradient(180deg,rgba(255,255,255,.55),rgba(255,255,255,.1) 60%),var(--chip-color,var(--lemon))}
+:root[data-style="funfair"][data-look="glass"] .switch input:checked{background:linear-gradient(180deg,rgba(255,110,135,.9),rgba(255,59,92,.8))}
+:root[data-style="funfair"][data-look="glass"] .winner{border-radius:28px}
+:root[data-style="funfair"][data-look="glass"] .winner::after{border-radius:28px 28px 0 0}
+:root[data-style="funfair"][data-look="glass"] .winner-text{text-shadow:3px 3px 0 rgba(255,212,0,.85)}

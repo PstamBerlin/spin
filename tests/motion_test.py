@@ -92,10 +92,20 @@ async def main():
         check("preset cards blob in", an == "blob-in", an)
         await pa.locator(".preset").nth(2).click(); await pa.wait_for_timeout(30)
         ap = await pa.locator(".item.appear").count(); check("loaded options cascade in", ap == 6, ap)
-        # a fresh visit gets the classic look; liquid glass is experimental and has to be switched on
+        # a fresh visit gets the Funfair look (no glass); the old look and both glasses are in Settings
         pf = await b.new_page(viewport={"width": 1280, "height": 860}); await pf.goto(URL); await pf.wait_for_timeout(800)
-        fresh = await pf.evaluate("[document.documentElement.dataset.look || '', document.getElementById('lookSel').value, document.querySelector('.hub').style.backdropFilter]")
-        check("classic is the look on a fresh visit", fresh == ["", "classic", ""], fresh)
+        fresh = await pf.evaluate("[document.documentElement.dataset.look || '', document.documentElement.dataset.style || '', document.getElementById('lookSel').value, document.querySelector('.hub').style.backdropFilter]")
+        check("Funfair is the look on a fresh visit", fresh == ["", "funfair", "fair", ""], fresh)
+        # Funfair: bulbs on the rim (the wheel draws yellow), the awning under the bar, and the four looks switch cleanly
+        ff = await pf.evaluate("""() => { const cv = document.getElementById('wheel'), x = cv.getContext('2d'), w = cv.width; let yellow = 0;
+          const d = x.getImageData(0, 0, w, w).data; for (let i = 0; i < d.length; i += 4) if (d[i] > 230 && d[i+1] > 190 && d[i+2] < 80 && d[i+3] > 200) yellow++;
+          const hem = getComputedStyle(document.querySelector('.bar'), '::after');
+          const res = [yellow > 40, hem.content !== 'none' && parseFloat(hem.height) > 10];
+          const sel = document.getElementById('lookSel'), r = document.documentElement, seen = [];
+          for (const v of ['fair-glass', 'classic', 'glass', 'fair']) { sel.value = v; sel.dispatchEvent(new Event('change')); seen.push((r.dataset.style || '-') + '/' + (r.dataset.look || '-')); }
+          return res.concat([seen.join(' '), JSON.parse(localStorage.getItem('spin-prefs-v1')).look]); }""")
+        check("Funfair has bulbs on the wheel and an awning under the bar", ff[0] and ff[1], ff[:2])
+        check("the four looks switch and the choice is remembered", ff[2] == "funfair/glass -/- -/glass funfair/-" and ff[3] == "fair", ff[2:])
         await pf.close()
         pgl = await b.new_page(viewport={"width": 1280, "height": 860}); pgl.on("pageerror", lambda e: errors.append(str(e)))
         await pgl.goto(URL); await pgl.wait_for_timeout(1000)

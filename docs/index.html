@@ -16,9 +16,10 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="manifest" href="manifest.webmanifest">
-<script>/* Springy animations is remembered; set before anything is drawn */ try { if (JSON.parse(localStorage.getItem("spin-prefs-v1") || "{}").spring) document.documentElement.setAttribute("data-spring", ""); } catch (e) {}</script>
+<script>/* Springy animations and the look are remembered; set before anything is drawn */ try { var sp = JSON.parse(localStorage.getItem("spin-prefs-v1") || "{}"), lk = sp.look || "fair", de = document.documentElement; if (sp.spring) de.setAttribute("data-spring", ""); if (lk === "fair" || lk === "fair-glass") de.setAttribute("data-style", "funfair"); if (lk === "glass" || lk === "fair-glass") de.setAttribute("data-look", "glass"); } catch (e) { document.documentElement.setAttribute("data-style", "funfair"); }</script>
 <link rel="stylesheet" href="style.css?v=b19c9314">
 <link rel="stylesheet" href="glass.css?v=baa71f01">
+<link rel="stylesheet" href="funfair.css?v=d4ffad53">
 </head>
 <body>
 <div class="mesh" aria-hidden="true"></div>
@@ -288,10 +289,12 @@
         <input type="checkbox" id="springSel">
       </label>
       <label class="setting">
-        <span>Look<small>Liquid glass is experimental</small></span>
+        <span>Look<small>Funfair is the new one; the old frosted look is still here</small></span>
         <select id="lookSel" aria-label="Look">
-          <option value="classic">Classic</option>
-          <option value="glass">Liquid glass (experimental)</option>
+          <option value="fair">Funfair</option>
+          <option value="fair-glass">Funfair glass</option>
+          <option value="classic">Old look</option>
+          <option value="glass">Old look, liquid glass</option>
         </select>
       </label>
       <label class="setting">
@@ -328,6 +331,6 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="qrcode.js?v=4c79be16"></script>
-<script src="app.js?v=8de7652e"></script>
+<script src="app.js?v=c0bfd0cb"></script>
 </body>
 </html>

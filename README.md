@@ -8,6 +8,9 @@ Live at spin.peterstam.eu. No accounts, no ads, no server: the whole wheel is pa
 - `docs/` is the whole website. Open `docs/index.html` through any static server.
 - The wheel, its options, colours, weights and settings are encoded in the `#w=` part of the link.
 - Saved wheels and the sound/theme preferences live in the browser's localStorage only.
+- Looks (Settings, The app, Look): **Funfair** is the default (`funfair.css`: awning, tickets, bulbs drawn by the wheel),
+  **Funfair glass** is its own liquid glass, and the **Old look** and **Old look, liquid glass** are kept as they were
+  (`style.css`, `glass.css`). The look is set on `<html>` as `data-style="funfair"` and/or `data-look="glass"`.
 - `sw.js` caches the app so it keeps working offline after the first visit (only on https).
 
 ## Test

@@ -193,6 +193,7 @@
 
   // ---------- wheel ----------
   const ctx2d = el.canvas.getContext("2d");
+  let glassOn = false, fairOn = false;   // the look (Settings): glass panes, and the Funfair bulbs round the wheel
   let angle = 0, vel = 0, spinning = false, lastT = 0, lastIdx = -1, flex = 0, flexDir = 1, size = 0, dpr = 1, layoutNo = 0;
   let drag = null;   // {a0, angle0, samples:[{t,a}]}
   let raf = 0;
@@ -254,6 +255,20 @@
     el.canvas.width = Math.floor(size * dpr); el.canvas.height = Math.floor(size * dpr);
     draw();
   }
+  // Funfair: light bulbs on the rim. They stay still while the wheel turns, and chase round while it spins.
+  // In Funfair glass they are glass beads (a bright glint, a see-through edge).
+  function bulbs(x, R, c) {
+    const n = Math.max(16, Math.min(36, Math.round(R / 9))), rr = R + c * 0.024, br = Math.max(2.2, c * 0.016);
+    const chase = (spinning || windup) && !reduceMotion, phase = chase ? Math.floor(performance.now() / 110) % 2 : -1;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * TAU - Math.PI / 2, bx = Math.cos(a) * rr, by = Math.sin(a) * rr, lit = phase < 0 || (i % 2) === phase;
+      if (lit) { x.beginPath(); x.arc(bx, by, br * 2, 0, TAU); x.fillStyle = "rgba(255,212,0,.22)"; x.fill(); }
+      x.beginPath(); x.arc(bx, by, br, 0, TAU);
+      x.fillStyle = lit ? (glassOn ? "rgba(255,226,90,.78)" : "#FFD400") : (glassOn ? "rgba(255,255,255,.22)" : "#7A5A1E"); x.fill();
+      if (glassOn) { x.lineWidth = 1; x.strokeStyle = "rgba(255,255,255,.75)"; x.stroke(); }
+      x.beginPath(); x.arc(bx - br * 0.35, by - br * 0.35, br * 0.38, 0, TAU); x.fillStyle = "rgba(255,255,255," + (lit ? 0.85 : 0.4) + ")"; x.fill();
+    }
+  }
   function draw() {
     const sl = layout(slices()); const n = sl.length;
     const c = size / 2;
@@ -265,6 +280,7 @@
     // outer glass ring
     x.beginPath(); x.arc(0, 0, R + c * 0.045, 0, TAU); x.fillStyle = "rgba(42,24,56,.9)"; x.fill();
     x.beginPath(); x.arc(0, 0, R + c * 0.045, 0, TAU); x.lineWidth = 2; x.strokeStyle = "rgba(255,255,255,.35)"; x.stroke();
+    if (fairOn) bulbs(x, R, c);
     x.rotate(angle);
     if (n === 0) {
       x.beginPath(); x.arc(0, 0, R, 0, TAU); x.fillStyle = "rgba(255,255,255,.15)"; x.fill();
@@ -279,7 +295,7 @@
       x.lineWidth = c * 0.02 + pulse * c * 0.01; x.strokeStyle = "rgba(255,255,255," + (0.5 + 0.4 * pulse) * Math.min(1, k * 3) + ")"; x.stroke();
     }
     // pegs at the boundaries
-    if (n > 1) for (const s of sl) { x.beginPath(); x.arc(Math.cos(s.start) * (R + c * 0.02), Math.sin(s.start) * (R + c * 0.02), c * 0.012, 0, TAU); x.fillStyle = "rgba(255,255,255,.75)"; x.fill(); }
+    if (n > 1 && !fairOn) for (const s of sl) { x.beginPath(); x.arc(Math.cos(s.start) * (R + c * 0.02), Math.sin(s.start) * (R + c * 0.02), c * 0.012, 0, TAU); x.fillStyle = "rgba(255,255,255,.75)"; x.fill(); }
     // glass highlight (frost)
     x.rotate(-angle);
     if (!hiGrad || hiGrad.R !== R) {
@@ -295,7 +311,7 @@
     x.rotate(flex * 0.35 * flexDir);
     x.beginPath(); x.moveTo(-c * 0.07, -c * 0.02); x.lineTo(c * 0.07, -c * 0.02); x.lineTo(0, c * 0.11); x.closePath();
     x.save(); x.translate(0, 3); x.fillStyle = "rgba(42,24,56,.28)"; x.fill(); x.restore();
-    x.fillStyle = "#FFF4E6"; x.fill(); x.lineWidth = 2; x.strokeStyle = PLUM; x.stroke();
+    x.fillStyle = fairOn ? "#FF3B5C" : "#FFF4E6"; x.fill(); x.lineWidth = 2; x.strokeStyle = PLUM; x.stroke();
     x.restore();
   }
   const fitCache = new Map(); let hiGrad = null;
@@ -968,7 +984,8 @@
   const root = document.documentElement;
   const canLens = !lite && !!(navigator.userAgentData && navigator.userAgentData.brands && navigator.userAgentData.brands.some((b) => b.brand === "Chromium"));
   const CARD_LENS = { blur: 14, edge: 22, scale: 70, sat: 1.9 };
-  let glassOn = false, lensSvg = null, lensTimer = 0;
+  const APP_LOOKS = ["fair", "fair-glass", "classic", "glass"];
+  let lensSvg = null, lensTimer = 0;
   function lensMap(w, h, r, edge) {
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + " " + h + '">' +
       '<defs><linearGradient id="r" x1="100%" y1="0%" x2="0%" y2="0%"><stop offset="0%" stop-color="#000"/><stop offset="100%" stop-color="#f00"/></linearGradient>' +
@@ -1003,9 +1020,11 @@
     lensTimer = setTimeout(() => { if (glassOn && !el.overlay.hidden && !elm.classList.contains("is-pulled")) lensOn(elm, CARD_LENS); }, ms);
   }
   function applyLook() {
-    glassOn = prefs.look === "glass";   // classic is the default; glass is an experiment you switch on
+    const look = APP_LOOKS.includes(prefs.look) ? prefs.look : "fair";   // Funfair is the default; the old look and both glasses are in Settings
+    glassOn = look === "glass" || look === "fair-glass"; fairOn = look === "fair" || look === "fair-glass";
     if (glassOn) root.setAttribute("data-look", "glass"); else root.removeAttribute("data-look");
-    el.lookSel.value = glassOn ? "glass" : "classic";
+    if (fairOn) root.setAttribute("data-style", "funfair"); else root.removeAttribute("data-style");
+    el.lookSel.value = look;
     lensOff(document.querySelector(".winner"));
     if (glassOn && !el.overlay.hidden) lensSoon(document.querySelector(".winner"), 300);
     draw();   // the hub's lens is part of the wheel's own drawing

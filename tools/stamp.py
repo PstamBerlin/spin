@@ -10,7 +10,7 @@ loads app.js?v=<hash of app.js> and so on: when a file changes, its address chan
 and its files always match. sw.js gets a version made from everything, so the offline copy renews too.
 """
 import hashlib, pathlib, re, sys
-ASSETS = ["style.css", "glass.css", "qrcode.js", "app.js"]
+ASSETS = ["style.css", "glass.css", "funfair.css", "qrcode.js", "app.js"]
 def stamped(site):
     html = (site / "index.html").read_text(); sw = (site / "sw.js").read_text()
     for a in ASSETS:
